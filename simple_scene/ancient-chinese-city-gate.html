@@ -1,0 +1,3662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Taiping Gate — Ancient Chinese City Gate Voxel World</title>
+<style>
+  :root {
+    --bg-ink: #0f141c;
+    --panel-bg: rgba(16, 20, 28, 0.76);
+    --panel-border: rgba(232, 198, 138, 0.28);
+    --gold: #ebc57c;
+    --gold-bright: #ffe1a3;
+    --vermilion: #c93b2b;
+    --text-main: #f5efe4;
+    --text-dim: #b9b2a6;
+  }
+
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-ink);
+    font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: var(--text-main);
+  }
+
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+  }
+
+  /* Loading Screen */
+  #loading-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 42%, #232a38 0%, #0e1219 75%);
+    transition: opacity 0.7s ease, visibility 0.7s ease;
+  }
+
+  #loading-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .seal-loader {
+    width: 66px;
+    height: 66px;
+    border: 2px solid rgba(235, 197, 124, 0.65);
+    background: linear-gradient(145deg, #b83224, #871d14);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff6e8;
+    letter-spacing: 2px;
+    box-shadow: 0 12px 36px rgba(201, 59, 43, 0.4);
+    margin-bottom: 20px;
+    font-family: "STKaiti", "KaiTi", "Noto Serif SC", Georgia, serif;
+  }
+
+  #loading-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--gold-bright);
+    margin-bottom: 8px;
+  }
+
+  #loading-status {
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+  }
+
+  .progress-track {
+    width: 240px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  #progress-bar {
+    width: 12%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--vermilion), var(--gold));
+    transition: width 0.25s ease;
+  }
+
+  /* HUD Overlay */
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+    transition: opacity 0.35s ease;
+  }
+
+  #hud.hud-hidden {
+    opacity: 0;
+  }
+
+  .top-left {
+    position: absolute;
+    top: 20px;
+    left: 22px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 13px 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+  }
+
+  .stamp-badge {
+    width: 38px;
+    height: 48px;
+    background: linear-gradient(160deg, #c93b2b, #8f2116);
+    border: 1px solid rgba(255, 224, 175, 0.55);
+    border-radius: 5px;
+    color: #fff5e4;
+    font-family: "STKaiti", "KaiTi", "Songti SC", Georgia, serif;
+    font-size: 15px;
+    line-height: 1.15;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 3px;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(140, 20, 12, 0.6);
+  }
+
+  .title-block h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--gold-bright);
+  }
+
+  .title-block p {
+    margin: 4px 0 0;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  .voxel-stats {
+    margin-top: 5px;
+    font-size: 10.5px;
+    color: rgba(235, 197, 124, 0.85);
+    letter-spacing: 0.06em;
+  }
+
+  .top-right {
+    position: absolute;
+    top: 20px;
+    right: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
+  .pill-group {
+    display: flex;
+    gap: 6px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 5px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  button.hud-btn {
+    appearance: none;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-main);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 6px 11px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  button.hud-btn:hover {
+    background: rgba(235, 197, 124, 0.16);
+    border-color: rgba(235, 197, 124, 0.35);
+    color: #fff;
+  }
+
+  button.hud-btn.active {
+    background: linear-gradient(135deg, rgba(201, 59, 43, 0.88), rgba(156, 36, 24, 0.92));
+    border-color: rgba(255, 215, 148, 0.55);
+    color: #fff8ec;
+    box-shadow: 0 2px 10px rgba(201, 59, 43, 0.35);
+  }
+
+  .bottom-bar {
+    position: absolute;
+    bottom: 18px;
+    left: 22px;
+    right: 22px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    pointer-events: none;
+  }
+
+  .controls-card, .camera-bar {
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--panel-border);
+    border-radius: 11px;
+    padding: 9px 13px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+  }
+
+  .controls-card {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.65;
+  }
+
+  .kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.11);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--gold-bright);
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    margin: 0 1px;
+  }
+
+  .camera-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .bar-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    margin-right: 4px;
+    padding-left: 3px;
+  }
+
+  /* Crosshair for FPS Free-Look mode */
+  #crosshair {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 15;
+    display: none;
+  }
+  #crosshair::before, #crosshair::after {
+    content: "";
+    position: absolute;
+    background: rgba(255, 235, 190, 0.8);
+    box-shadow: 0 0 4px rgba(0,0,0,0.7);
+  }
+  #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
+  #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+
+  #fps-banner {
+    position: fixed;
+    top: 78px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(16, 20, 28, 0.85);
+    border: 1px solid rgba(235, 197, 124, 0.45);
+    color: var(--gold-bright);
+    padding: 6px 16px;
+    border-radius: 99px;
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  #fps-banner.visible {
+    opacity: 1;
+  }
+
+  @media (max-width: 820px) {
+    .controls-card { display: none; }
+    .top-left { max-width: 62vw; padding: 10px 12px; }
+    .title-block p { display: none; }
+  }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="seal-loader">太平</div>
+  <div id="loading-title">Taiping Gate · 太平城阙</div>
+  <div id="loading-status">Laying masonry &amp; raising timber brackets…</div>
+  <div class="progress-track"><div id="progress-bar"></div></div>
+</div>
+
+<div id="canvas-container"></div>
+<div id="crosshair"></div>
+<div id="fps-banner">First-Person Fly Mode Active — Move Mouse to Look · Press ESC or F to Exit</div>
+
+<div id="hud">
+  <div class="top-left">
+    <div class="stamp-badge">太平<br>城樓</div>
+    <div class="title-block">
+      <h1>Taiping Gate Tower · 太平門</h1>
+      <p>Ancient Chinese Imperial Gatehouse, Bustling Market &amp; Shan-Shui Landscape</p>
+      <div class="voxel-stats" id="voxel-stats">Building voxel world…</div>
+    </div>
+  </div>
+
+  <div class="top-right">
+    <div class="pill-group" role="group" aria-label="Time of Day">
+      <button class="hud-btn active" data-mood="morning">晨曦 Golden</button>
+      <button class="hud-btn" data-mood="day">晴昼 Clear Day</button>
+      <button class="hud-btn" data-mood="dusk">夕照 Sunset</button>
+      <button class="hud-btn" data-mood="night">华灯 Night</button>
+    </div>
+    <div class="pill-group" role="group" aria-label="Roam Mode">
+      <button class="hud-btn" id="btn-fps" title="Toggle First-Person Mouse-Look Fly Mode (F)">FPS Fly (F)</button>
+      <button class="hud-btn" id="btn-tour" title="Toggle Guided Scenic Tour (T)">Auto Tour (T)</button>
+      <button class="hud-btn" id="btn-hud" title="Hide / Show Interface (H)">Hide UI (H)</button>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="controls-card">
+      <div><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> / <span class="kbd">Arrows</span> Free Roam &nbsp;·&nbsp; <span class="kbd">Space</span>/<span class="kbd">E</span> Up &nbsp;·&nbsp; <span class="kbd">Q</span>/<span class="kbd">C</span> Down &nbsp;·&nbsp; <span class="kbd">Shift</span> Fast</div>
+      <div><span class="kbd">Left Drag</span> Rotate &nbsp;·&nbsp; <span class="kbd">Right Drag</span> Pan &nbsp;·&nbsp; <span class="kbd">Scroll</span> Zoom &nbsp;·&nbsp; <span class="kbd">F</span> FPS Mouse-Look</div>
+    </div>
+
+    <div class="camera-bar">
+      <span class="bar-label">Views</span>
+      <button class="hud-btn active" data-cam="0">1 · Panorama</button>
+      <button class="hud-btn" data-cam="1">2 · Gate Guards</button>
+      <button class="hud-btn" data-cam="2">3 · Tower Soldiers</button>
+      <button class="hud-btn" data-cam="3">4 · Inner Market</button>
+      <button class="hud-btn" data-cam="4">5 · Tavern &amp; Street</button>
+      <button class="hud-btn" data-cam="5">6 · Moat &amp; Mountains</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ============================================================================
+// 1. DETERMINISTIC PRNG & COLOR UTILITIES
+// ============================================================================
+function hash3(x, y, z) {
+  let h = (x * 374761393 + y * 668265263 + z * 2147483647) | 0;
+  h = ((h ^ (h >> 13)) * 1274126177) | 0;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
+}
+
+function hash2(x, z) {
+  let h = (x * 374761393 + z * 668265263 + 0x9e3779b9) | 0;
+  h = ((h ^ (h >> 13)) * 1274126177) | 0;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
+}
+
+function fbm2(x, z) {
+  const n1 = smoothNoise(x * 0.035, z * 0.035);
+  const n2 = smoothNoise(x * 0.08, z * 0.08) * 0.5;
+  const n3 = smoothNoise(x * 0.18, z * 0.18) * 0.25;
+  return (n1 + n2 + n3) / 1.75;
+}
+
+function smoothNoise(x, z) {
+  const xi = Math.floor(x), zi = Math.floor(z);
+  const xf = x - xi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = zf * zf * (3 - 2 * zf);
+  const a = hash2(xi, zi), b = hash2(xi + 1, zi);
+  const c = hash2(xi, zi + 1), d = hash2(xi + 1, zi + 1);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+}
+
+function varyColor(hex, delta) {
+  let r = ((hex >> 16) & 255) + delta;
+  let g = ((hex >> 8) & 255) + delta;
+  let b = (hex & 255) + delta;
+  r = r < 0 ? 0 : r > 255 ? 255 : r | 0;
+  g = g < 0 ? 0 : g > 255 ? 255 : g | 0;
+  b = b < 0 ? 0 : b > 255 ? 255 : b | 0;
+  return (r << 16) | (g << 8) | b;
+}
+
+function mixHex(c1, c2, t) {
+  const r1 = (c1 >> 16) & 255, g1 = (c1 >> 8) & 255, b1 = c1 & 255;
+  const r2 = (c2 >> 16) & 255, g2 = (c2 >> 8) & 255, b2 = c2 & 255;
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const b = Math.round(b1 + (b2 - b1) * t);
+  return (r << 16) | (g << 8) | b;
+}
+
+// Curated Historical Chinese Architectural & Landscape Palette
+const PAL = {
+  // Stone & Brick
+  wallBrick: 0x626b75,
+  wallBrickDark: 0x4c545e,
+  wallBrickLight: 0x76808a,
+  plinthStone: 0x999892,
+  marble: 0xeae6dd,
+  marbleShade: 0xd2cdc2,
+  roadStone: 0x828588,
+  roadTrim: 0x9fa19d,
+  cobbleInner: 0x77797c,
+  postRoad: 0xb99e78,
+  postRoadEdge: 0x9b8260,
+
+  // Imperial Timber, Lacquer & Roofs
+  vermilion: 0xb62e23,
+  vermilionBright: 0xd13b2d,
+  vermilionDark: 0x7d1d16,
+  darkWood: 0x4b2f20,
+  warmWood: 0x7c5032,
+  lightWood: 0xa9784d,
+  bamboo: 0x7ea04e,
+  straw: 0xd2b166,
+  whiteWall: 0xe6e1d6,
+
+  roofCharcoal: 0x2c333d,
+  roofSlate: 0x39424f,
+  roofJade: 0x257963,
+  roofJadeBright: 0x339c7f,
+  gold: 0xe5b548,
+  goldBright: 0xfad269,
+  beamBlue: 0x255385,
+  beamGreen: 0x267d5b,
+  plaqueBlue: 0x18294a,
+
+  // Glows & Emissives
+  lanternRed: 0xf43a27,
+  lanternCore: 0xff8547,
+  windowGlow: 0xffcb74,
+  fireOrange: 0xff6e24,
+
+  // Landscape & Foliage
+  grassLush: 0x5c8b43,
+  grassWarm: 0x739c48,
+  grassMeadow: 0x4e7c3d,
+  cropGold: 0xd7af43,
+  cropGreen: 0x7aa346,
+  earth: 0x6f553d,
+  cliffGrey: 0x5c666c,
+  cliffDark: 0x434c52,
+  cliffMoss: 0x4c7045,
+  willowLeaf: 0x6ba347,
+  willowLight: 0x86ba56,
+  pineNeedles: 0x2a5638,
+  pineDark: 0x1e4029,
+  peachPink: 0xf293ab,
+  peachLight: 0xffbfd0,
+  peachDark: 0xd96b88,
+  ginkgoGold: 0xe8b438,
+  mapleRed: 0xc8432b,
+  lotusPad: 0x3b7d49,
+  lotusPink: 0xf58eb0,
+  waterDeep: 0x246773,
+  waterMid: 0x31838c,
+  waterShallow: 0x4ba3a6,
+  waterFoam: 0xdcf2f5
+};
+
+// ============================================================================
+// 2. FAST CONTIGUOUS VOXEL ENGINE WITH AMBIENT OCCLUSION (256 x 112 x 256)
+// ============================================================================
+const X_MIN = -128, X_MAX = 127, NX = 256;
+const Y_MIN = -12,  Y_MAX = 99,  NY = 112;
+const Z_MIN = -128, Z_MAX = 127, NZ = 256;
+
+const MAT_EMPTY  = 0;
+const MAT_SOLID  = 1; // Matte brick, wood, stone, foliage
+const MAT_GLAZED = 2; // Glazed roof tiles, gold, silk, porcelain
+const MAT_GLOW   = 3; // Self-illuminated lanterns, warm windows, braziers
+const MAT_WATER  = 4; // Translucent moat, stream, waterfall pool
+
+const voxGrid = new Uint32Array(NX * NY * NZ);
+// Chunk occupancy (16x16x16 chunks -> 16 x 7 x 16 = 1792 chunks)
+const CX = 16, CY = 7, CZ = 16;
+const chunkDirty = new Uint8Array(CX * CY * CZ);
+
+function vIdx(x, y, z) {
+  return (x - X_MIN) + ((z - Z_MIN) << 8) + ((y - Y_MIN) << 16);
+}
+
+function setVox(x, y, z, color, mat = MAT_SOLID, jitter = 10) {
+  x = Math.round(x); y = Math.round(y); z = Math.round(z);
+  if (x < X_MIN || x > X_MAX || y < Y_MIN || y > Y_MAX || z < Z_MIN || z > Z_MAX) return;
+  let c = color;
+  if (jitter > 0) {
+    const d = Math.round((hash3(x, y, z) - 0.5) * 2 * jitter);
+    c = varyColor(color, d);
+  }
+  voxGrid[vIdx(x, y, z)] = ((mat & 0xff) << 24) | (c & 0xffffff);
+  const cIdx = ((x - X_MIN) >> 4) + (((z - Z_MIN) >> 4) * CX) + (((y - Y_MIN) >> 4) * CX * CZ);
+  chunkDirty[cIdx] = 1;
+}
+
+function clearVox(x, y, z) {
+  x = Math.round(x); y = Math.round(y); z = Math.round(z);
+  if (x < X_MIN || x > X_MAX || y < Y_MIN || y > Y_MAX || z < Z_MIN || z > Z_MAX) return;
+  voxGrid[vIdx(x, y, z)] = 0;
+}
+
+function getVox(x, y, z) {
+  if (x < X_MIN || x > X_MAX || y < Y_MIN || y > Y_MAX || z < Z_MIN || z > Z_MAX) return 0;
+  return voxGrid[vIdx(x, y, z)];
+}
+
+function isOpaque(x, y, z) {
+  if (x < X_MIN || x > X_MAX || y < Y_MIN || y > Y_MAX || z < Z_MIN || z > Z_MAX) return false;
+  const m = voxGrid[vIdx(x, y, z)] >>> 24;
+  return m !== 0 && m !== MAT_WATER;
+}
+
+function fillBox(x1, y1, z1, x2, y2, z2, color, mat = MAT_SOLID, jitter = 10) {
+  const xa = Math.min(x1, x2), xb = Math.max(x1, x2);
+  const ya = Math.min(y1, y2), yb = Math.max(y1, y2);
+  const za = Math.min(z1, z2), zb = Math.max(z1, z2);
+  for (let y = ya; y <= yb; y++) {
+    for (let z = za; z <= zb; z++) {
+      for (let x = xa; x <= xb; x++) {
+        setVox(x, y, z, color, mat, jitter);
+      }
+    }
+  }
+}
+
+function clearBox(x1, y1, z1, x2, y2, z2) {
+  const xa = Math.min(x1, x2), xb = Math.max(x1, x2);
+  const ya = Math.min(y1, y2), yb = Math.max(y1, y2);
+  const za = Math.min(z1, z2), zb = Math.max(z1, z2);
+  for (let y = ya; y <= yb; y++) {
+    for (let z = za; z <= zb; z++) {
+      for (let x = xa; x <= xb; x++) {
+        clearVox(x, y, z);
+      }
+    }
+  }
+}
+
+function fillColumn(cx, y1, y2, cz, radius, color, mat = MAT_SOLID, jitter = 6) {
+  const r2 = radius * radius + 0.25;
+  const ri = Math.ceil(radius);
+  for (let y = y1; y <= y2; y++) {
+    for (let dz = -ri; dz <= ri; dz++) {
+      for (let dx = -ri; dx <= ri; dx++) {
+        if (dx * dx + dz * dz <= r2) {
+          setVox(cx + dx, y, cz + dz, color, mat, jitter);
+        }
+      }
+    }
+  }
+}
+
+function fillEllipsoid(cx, cy, cz, rx, ry, rz, color, mat = MAT_SOLID, jitter = 14, density = 1.0) {
+  const ix = Math.ceil(rx), iy = Math.ceil(ry), iz = Math.ceil(rz);
+  for (let dy = -iy; dy <= iy; dy++) {
+    for (let dz = -iz; dz <= iz; dz++) {
+      for (let dx = -ix; dx <= ix; dx++) {
+        const d = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) + (dz * dz) / (rz * rz);
+        if (d <= 1.0) {
+          if (density >= 1.0 || hash3(cx + dx, cy + dy, cz + dz) < density) {
+            setVox(cx + dx, cy + dy, cz + dz, color, mat, jitter);
+          }
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 3. ROAD & BRIDGE SHARED PATH GEOMETRY (Used by World & Moving Traffic)
+// ============================================================================
+// z < -13: Inner City Flagstone Avenue (x center = 0, y = 1)
+// -13 <= z <= 13: Vaulted City Gate Tunnel (x center = 0, y = 1)
+// 19 <= z <= 41: Triple-Arch White Marble Bridge over Moat (crowns at y = 5)
+// z > 44: Scenic Winding Post Road heading toward Mountain Pass at z = 125
+function getRoadCenterX(z) {
+  if (z <= 45) return 0;
+  const t = (z - 45) / 82;
+  return Math.sin(t * Math.PI * 1.35) * 14 * Math.min(1, (z - 45) / 18);
+}
+
+function getRoadSurfaceY(z) {
+  if (z >= 18 && z <= 42) {
+    // Smooth arched stone bridge crown at z = 30 (ample headroom for boats beneath!)
+    const u = (z - 30) / 12; // -1..+1
+    const arch = Math.max(0, 1 - u * u);
+    return 1 + arch * 4.6;
+  }
+  if (z > 58) {
+    // Gentle rise toward the outer mountain pass
+    const t = Math.min(1, (z - 58) / 68);
+    return 1 + t * t * 4.2;
+  }
+  return 1;
+}
+
+// ============================================================================
+// 4. TRADITIONAL CHINESE ARCHITECTURAL HELPERS (Roofs, Dougong, Lanterns)
+// ============================================================================
+function buildHangingLantern(x, y, z, scale = 1) {
+  // Cord & gold cap
+  setVox(x, y + 1, z, PAL.darkWood, MAT_SOLID, 2);
+  setVox(x, y, z, PAL.gold, MAT_GLAZED, 4);
+  if (scale === 2) {
+    // Grand Palace Lantern (3x3x3 core)
+    for (let dy = -2; dy <= -1; dy++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (Math.abs(dx) + Math.abs(dz) <= 2) {
+            const isCorner = Math.abs(dx) === 1 && Math.abs(dz) === 1;
+            setVox(x + dx, y + dy, z + dz, isCorner ? PAL.vermilionDark : PAL.lanternRed, isCorner ? MAT_SOLID : MAT_GLOW, 4);
+          }
+        }
+      }
+    }
+    setVox(x, y - 3, z, PAL.gold, MAT_GLAZED, 3);
+    setVox(x, y - 4, z, PAL.vermilionBright, MAT_GLOW, 2);
+  } else {
+    // Standard Silk Lantern
+    setVox(x, y - 1, z, PAL.lanternRed, MAT_GLOW, 4);
+    setVox(x, y - 2, z, PAL.lanternRed, MAT_GLOW, 4);
+    setVox(x, y - 3, z, PAL.gold, MAT_GLAZED, 3);
+  }
+}
+
+// Builds an authentic Chinese Xieshan (Hip-and-Gable) or Yingshan curved roof
+// with flying corner eaves (飞檐翘角), emerald/gold glazed trim, ribbed tiles, & Chiwen finials
+function buildXieshanRoof({
+  cx, baseY, cz, halfW, halfD, height,
+  tileColor = PAL.roofCharcoal,
+  trimColor = PAL.roofJade,
+  ridgeGold = PAL.gold,
+  skirtOnly = false,
+  innerHalfW = 0,
+  innerHalfD = 0,
+  lanternCorners = true
+}) {
+  const gableHalfW = Math.max(3, Math.round(halfW * 0.56));
+
+  for (let dz = -halfD - 1; dz <= halfD + 1; dz++) {
+    for (let dx = -halfW - 1; dx <= halfW + 1; dx++) {
+      const ax = Math.abs(dx), az = Math.abs(dz);
+      if (ax > halfW + 1 || az > halfD + 1) continue;
+
+      // Skip inner building core if this is a lower skirt roof (腰檐)
+      if (skirtOnly && ax < innerHalfW && az < innerHalfD) continue;
+
+      // Normalized inward progress [0 at eave -> 1 at ridge]
+      const tx = Math.max(0, Math.min(1, 1 - ax / (halfW + 0.5)));
+      const tz = Math.max(0, Math.min(1, 1 - az / (halfD + 0.5)));
+
+      // Xieshan profile: hipped on lower half, transitions to gable above ~0.52 height
+      let prog;
+      if (ax <= gableHalfW) {
+        prog = tz;
+      } else {
+        const hipTx = Math.max(0, 1 - (ax - gableHalfW) / (halfW - gableHalfW + 0.6));
+        prog = Math.min(tz, hipTx * 0.62 + 0.02);
+      }
+
+      if (ax > halfW && az > halfD) {
+        // Extreme flying corner tip (翼角尖)
+        prog = 0;
+      } else if (ax > halfW || az > halfD) {
+        // Only extend flying tips near the corners
+        if (ax < halfW - 2 || az < halfD - 2) continue;
+        prog = 0;
+      }
+
+      // Concave Chinese roof curve
+      const curveY = Math.pow(prog, 1.48) * height;
+
+      // Flying corner eave lift (飞檐翘角)
+      const cornerFactorX = Math.max(0, (ax - (halfW - 5)) / 6);
+      const cornerFactorZ = Math.max(0, (az - (halfD - 5)) / 6);
+      const cornerLift = cornerFactorX * cornerFactorZ * 2.8;
+
+      // Ribbed barrel tiles (筒瓦垄)
+      const tileRib = (ax % 2 === 0) ? 0.28 : 0;
+
+      const ry = Math.round(baseY + curveY + cornerLift + tileRib);
+
+      // Edge trim detection (琉璃剪边 + 垂脊/戗脊)
+      const isOuterEdge = (ax >= halfW - 0.5 || az >= halfD - 0.5);
+      const isHipRidge = Math.abs((halfW - ax) - (halfD - az)) <= 0.8 && prog < 0.65;
+      const isGableEdge = (!skirtOnly) && Math.abs(ax - gableHalfW) <= 0.6 && prog >= 0.52;
+
+      let c = tileColor;
+      let mat = MAT_GLAZED;
+      if (isHipRidge || isGableEdge) {
+        c = (ax + az) % 3 === 0 ? ridgeGold : trimColor;
+      } else if (isOuterEdge) {
+        c = trimColor;
+      }
+
+      setVox(cx + dx, ry, cz + dz, c, mat, 7);
+      // Solid wooden eave backing underneath so no gaps appear when looking up!
+      setVox(cx + dx, ry - 1, cz + dz, isOuterEdge ? PAL.vermilionDark : PAL.darkWood, MAT_SOLID, 5);
+
+      // Fill ornate triangular gable wall (山花板) on upper Xieshan roofs
+      if (!skirtOnly && Math.abs(ax - gableHalfW) < 0.6 && tz > 0.55) {
+        const gableBottom = Math.round(baseY + Math.pow(0.55, 1.48) * height);
+        for (let gy = gableBottom; gy < ry; gy++) {
+          const gc = (gy + az) % 2 === 0 ? PAL.beamGreen : PAL.vermilionDark;
+          setVox(cx + dx, gy, cz + dz, gc, MAT_SOLID, 5);
+        }
+      }
+    }
+  }
+
+  // Main Horizontal Ridge (正脊) & Chiwen Dragon Finials (鸱吻) for full roofs
+  if (!skirtOnly) {
+    const ridgeY = baseY + height;
+    for (let dx = -gableHalfW; dx <= gableHalfW; dx++) {
+      setVox(cx + dx, ridgeY, cz, trimColor, MAT_GLAZED, 4);
+      setVox(cx + dx, ridgeY + 1, cz, Math.abs(dx) % 4 === 0 ? ridgeGold : trimColor, MAT_GLAZED, 4);
+    }
+    // Chiwen dragon-tail ornaments at both ends of main ridge
+    for (const s of [-1, 1]) {
+      const rx = cx + s * gableHalfW;
+      setVox(rx, ridgeY + 2, cz, ridgeGold, MAT_GLAZED, 3);
+      setVox(rx + s, ridgeY + 2, cz, trimColor, MAT_GLAZED, 3);
+      setVox(rx + s, ridgeY + 3, cz, ridgeGold, MAT_GLAZED, 3);
+      setVox(rx, ridgeY + 3, cz - 1, ridgeGold, MAT_GLAZED, 3);
+    }
+    // Central flaming pearl寶頂
+    setVox(cx, ridgeY + 2, cz, ridgeGold, MAT_GLAZED, 2);
+    setVox(cx, ridgeY + 3, cz, PAL.goldBright, MAT_GLAZED, 2);
+  }
+
+  // Corner Palace Lanterns hanging under the upturned flying eaves
+  if (lanternCorners) {
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        buildHangingLantern(cx + sx * halfW, baseY + 1, cz + sz * halfD, halfW >= 18 ? 2 : 1);
+      }
+    }
+  }
+}
+
+// Builds layered Dougong bracket sets (斗拱) & painted architrave beam (彩画额枋)
+function buildArchitraveAndDougong(cx, y, cz, halfW, halfD) {
+  // Painted architrave beam (青绿和玺彩画)
+  for (let dx = -halfW; dx <= halfW; dx++) {
+    for (const sz of [-1, 1]) {
+      const pat = Math.abs(dx) % 5 === 0 ? PAL.gold : (Math.abs(dx) % 2 === 0 ? PAL.beamBlue : PAL.beamGreen);
+      setVox(cx + dx, y, cz + sz * halfD, pat, MAT_SOLID, 4);
+      // Bracket clusters every 4 voxels
+      if (Math.abs(dx) % 4 === 0) {
+        setVox(cx + dx, y + 1, cz + sz * (halfD + 1), PAL.vermilion, MAT_SOLID, 4);
+        setVox(cx + dx - 1, y + 1, cz + sz * (halfD + 1), PAL.beamGreen, MAT_SOLID, 4);
+        setVox(cx + dx + 1, y + 1, cz + sz * (halfD + 1), PAL.beamGreen, MAT_SOLID, 4);
+        setVox(cx + dx, y + 2, cz + sz * (halfD + 2), PAL.gold, MAT_GLAZED, 4);
+      }
+    }
+  }
+  for (let dz = -halfD; dz <= halfD; dz++) {
+    for (const sx of [-1, 1]) {
+      const pat = Math.abs(dz) % 4 === 0 ? PAL.gold : (Math.abs(dz) % 2 === 0 ? PAL.beamBlue : PAL.beamGreen);
+      setVox(cx + sx * halfW, y, cz + dz, pat, MAT_SOLID, 4);
+      if (Math.abs(dz) % 4 === 0) {
+        setVox(cx + sx * (halfW + 1), y + 1, cz + dz, PAL.vermilion, MAT_SOLID, 4);
+        setVox(cx + sx * (halfW + 2), y + 2, cz + dz, PAL.gold, MAT_GLAZED, 4);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 5. WORLD GENERATION — PART A: TERRAIN, MOAT, BRIDGE, WALL & GATE TOWER
+// ============================================================================
+const loadingStatus = document.getElementById('loading-status');
+const progressBar = document.getElementById('progress-bar');
+
+function buildBaseTerrainAndMoat() {
+  for (let z = Z_MIN; z <= Z_MAX; z++) {
+    const roadCX = getRoadCenterX(z);
+    for (let x = X_MIN; x <= X_MAX; x++) {
+      // Solid diorama earth skirt along the 4 world borders
+      if (x === X_MIN || x === X_MAX || z === Z_MIN || z === Z_MAX) {
+        fillBox(x, -3, z, x, -1, z, PAL.earth, MAT_SOLID, 6);
+      }
+
+      // Moat channel outside the city wall (z = 19..41), curved slightly near edges
+      const moatWave = Math.sin(x * 0.04) * 1.5;
+      const moatZ1 = 19 + moatWave * 0.4;
+      const moatZ2 = 41 + moatWave;
+
+      // Mountain stream joining the moat on the East side (x around +48..+64, z = 41..102)
+      const streamCenterX = 54 + Math.sin((z - 40) * 0.075) * 6;
+      const inStream = (z >= 40 && z <= 102 && Math.abs(x - streamCenterX) <= 3.6);
+
+      if ((z >= moatZ1 && z <= moatZ2) || inStream) {
+        // Carved stone moat embankments at the edges
+        const nearMoatEdge = (z >= moatZ1 && z <= moatZ2) && (Math.abs(z - moatZ1) < 1.35 || Math.abs(z - moatZ2) < 1.35);
+        if (nearMoatEdge && Math.abs(x) > 9) {
+          fillBox(x, -4, z, x, 0, z, PAL.plinthStone, MAT_SOLID, 8);
+        } else {
+          // Moat / stream bed & translucent jade water
+          setVox(x, -4, z, PAL.earth, MAT_SOLID, 8);
+          setVox(x, -3, z, PAL.waterDeep, MAT_SOLID, 6);
+          const distBank = inStream
+            ? Math.max(0, 3.6 - Math.abs(x - streamCenterX))
+            : Math.min(z - moatZ1, moatZ2 - z);
+          const wCol = distBank < 2.2 ? PAL.waterShallow : (distBank < 5 ? PAL.waterMid : PAL.waterDeep);
+          setVox(x, -2, z, wCol, MAT_WATER, 5);
+          setVox(x, -1, z, wCol, MAT_WATER, 5);
+        }
+        continue;
+      }
+
+      // Inner City Ground (z < 0)
+      if (z < -12) {
+        setVox(x, -1, z, PAL.earth, MAT_SOLID, 4);
+        const distRoad = Math.abs(x - roadCX);
+        // Side cross-street at z = -56..-62
+        const inCrossStreet = (z >= -62 && z <= -56 && Math.abs(x) <= 95);
+        if (distRoad <= 9) {
+          // Imperial Flagstone Main Street (御街)
+          const isCenterSlab = distRoad <= 2;
+          const isCurb = distRoad === 9;
+          const slabGrid = ((Math.abs(x) % 3 === 0) || (Math.abs(z) % 4 === 0)) ? -7 : 4;
+          const baseC = isCurb ? PAL.roadTrim : (isCenterSlab ? PAL.plinthStone : PAL.roadStone);
+          setVox(x, 0, z, varyColor(baseC, slabGrid), MAT_SOLID, 5);
+        } else if (inCrossStreet) {
+          setVox(x, 0, z, PAL.cobbleInner, MAT_SOLID, 9);
+        } else {
+          // Inner city paved plazas & courtyard earth
+          const isPlaza = Math.abs(x) <= 38;
+          setVox(x, 0, z, isPlaza ? 0x707274 : 0x5f7446, MAT_SOLID, 9);
+        }
+        continue;
+      }
+
+      // City Wall Footprint & Outer Gate Plaza (-12 <= z <= 19)
+      if (z <= 19) {
+        setVox(x, -1, z, PAL.earth, MAT_SOLID, 4);
+        const distRoad = Math.abs(x);
+        if (distRoad <= 16) {
+          const grid = ((Math.abs(x) % 3 === 0) || (Math.abs(z) % 3 === 0)) ? -6 : 3;
+          setVox(x, 0, z, varyColor(PAL.roadStone, grid), MAT_SOLID, 5);
+        } else {
+          setVox(x, 0, z, PAL.grassLush, MAT_SOLID, 12);
+        }
+        continue;
+      }
+
+      // Scenic Outer Landscape Terrain (z > 41)
+      const distPostRoad = Math.abs(x - roadCX);
+      if (distPostRoad <= 6.5) {
+        const ry = Math.floor(getRoadSurfaceY(z)) - 1;
+        for (let ty = -2; ty <= ry; ty++) {
+          const isEdge = distPostRoad >= 5.2;
+          setVox(x, ty, z, isEdge ? PAL.postRoadEdge : PAL.postRoad, MAT_SOLID, 8);
+        }
+      } else {
+        // Rolling meadow hills outside the moat
+        const n = fbm2(x + 200, z + 200);
+        const roadBlend = Math.min(1, Math.max(0, (distPostRoad - 6.5) / 10));
+        const baseRoadY = getRoadSurfaceY(z) - 1;
+        let h = Math.round(baseRoadY * (1 - roadBlend) + (n * 5.5 - 0.8) * roadBlend);
+        if (z < 47) h = Math.min(h, 1); // Gentle bank near moat
+        for (let ty = -3; ty <= h; ty++) {
+          const topC = (n > 0.55) ? PAL.grassWarm : PAL.grassLush;
+          setVox(x, ty, z, ty === h ? topC : PAL.earth, MAT_SOLID, 10);
+        }
+      }
+    }
+  }
+}
+
+function buildTripleArchBridge() {
+  // Spans z = 18..42 across the moat, x = -9..+9
+  const archCenters = [22.5, 30, 37.5];
+  const archRadii   = [2.6, 4.3, 2.6];
+
+  for (let z = 18; z <= 42; z++) {
+    const deckTop = Math.round(getRoadSurfaceY(z));
+    // Check if z falls inside one of the 3 semicircular water arches
+    let archCeil = -10;
+    for (let i = 0; i < 3; i++) {
+      const dz = z - archCenters[i];
+      const r = archRadii[i];
+      if (Math.abs(dz) <= r) {
+        archCeil = Math.round(-1.0 + Math.sqrt(Math.max(0, r * r - dz * dz)));
+      }
+    }
+
+    for (let x = -9; x <= 9; x++) {
+      const isSideFace = Math.abs(x) === 9;
+      for (let y = -4; y < deckTop - 1; y++) {
+        if (y <= archCeil) {
+          // Open arch all the way through x = -9..+9 so boats & water pass cleanly!
+          if (y === -2 || y === -1) setVox(x, y, z, PAL.waterMid, MAT_WATER, 4);
+          else if (y >= 0) clearVox(x, y, z);
+          continue;
+        }
+        const isArchRing = (y === archCeil + 1);
+        const col = (isSideFace || isArchRing) ? PAL.marble : PAL.marbleShade;
+        setVox(x, y, z, col, MAT_SOLID, 5);
+      }
+
+      // Bridge Deck Pavement
+      const deckCol = Math.abs(x) <= 2 ? PAL.marble : (Math.abs(x) === 8 ? PAL.marbleShade : 0xdad5ca);
+      setVox(x, deckTop - 1, z, deckCol, MAT_SOLID, 5);
+
+      // Carved White Marble Balustrades & Finial Posts (望柱)
+      if (isSideFace) {
+        setVox(x, deckTop, z, PAL.marble, MAT_SOLID, 4);
+        if (z % 3 === 0) {
+          setVox(x, deckTop + 1, z, PAL.marble, MAT_SOLID, 3);
+          setVox(x, deckTop + 2, z, PAL.gold, MAT_GLAZED, 4);
+        } else {
+          setVox(x, deckTop + 1, z, PAL.marbleShade, MAT_SOLID, 4);
+        }
+      }
+    }
+  }
+
+  // Carved Stone Guardian Lions (石狮子) guarding the outer gate approach (z = 16, x = ±11)
+  for (const sx of [-1, 1]) {
+    const lx = sx * 11, lz = 16;
+    fillBox(lx - 1, 1, lz - 1, lx + 1, 2, lz + 1, PAL.marbleShade, MAT_SOLID, 4);
+    fillBox(lx - 1, 3, lz - 1, lx + 1, 3, lz + 1, PAL.marble, MAT_SOLID, 3);
+    // Lion body, mane, raised paw on brocade ball
+    fillBox(lx - 1, 4, lz - 1, lx + 1, 5, lz, PAL.marble, MAT_SOLID, 5);
+    fillBox(lx - 1, 6, lz, lx + 1, 7, lz + 1, PAL.marble, MAT_SOLID, 5);
+    setVox(lx, 4, lz + 1, PAL.marbleShade, MAT_SOLID, 3);
+    setVox(lx - sx, 4, lz + 1, PAL.gold, MAT_GLAZED, 3);
+  }
+}
+
+function buildMonumentalCityWallAndGateTower() {
+  // 1. Flanking City Walls (x = -128..+127, z = -9..+9, height y = 1..19)
+  // Central Gate Platform (城台: x = -30..+30, z = -12..+12, height y = 1..22)
+  // Flanking Protruding Watch Bastions (马面: x = ±48..±62, z = -9..+14, height y = 1..20)
+  for (let x = X_MIN; x <= X_MAX; x++) {
+    const ax = Math.abs(x);
+    const inGatePlatform = ax <= 30;
+    const inBastion = (ax >= 48 && ax <= 62) || (ax >= 96 && ax <= 108);
+
+    const wallTopY = inGatePlatform ? 22 : (inBastion ? 20 : 19);
+    const baseZMin = inGatePlatform ? -12 : -9;
+    const baseZMax = inGatePlatform ? 12 : (inBastion ? 14 : 9);
+
+    for (let y = 0; y <= wallTopY; y++) {
+      // Authentic battered masonry slope (收分: steps inward slightly with height)
+      const batter = y > 14 ? 1 : 0;
+      const z1 = baseZMin + batter;
+      const z2 = baseZMax - batter;
+
+      for (let z = z1; z <= z2; z++) {
+        // Interior fill vs outer brick skin
+        const isSkin = (z === z1 || z === z2 || y === wallTopY || ax === 30 || ax === 48 || ax === 62);
+        if (!isSkin && y < wallTopY - 1 && Math.abs(x) > 10) {
+          // Hollow optimization not needed, solid helps AO, keep outer 2 layers solid
+          if (z > z1 + 1 && z < z2 - 1) continue;
+        }
+
+        let col = PAL.wallBrick;
+        if (y <= 2) col = PAL.plinthStone;
+        else if (y === wallTopY - 1) col = PAL.plinthStone;
+        else if (y === wallTopY) col = PAL.roadStone;
+        else {
+          // Subtle horizontal brick course banding
+          const course = ((y + ((x + z) & 1)) % 4 === 0) ? PAL.wallBrickDark : PAL.wallBrick;
+          col = course;
+        }
+        setVox(x, y, z, col, MAT_SOLID, 9);
+      }
+    }
+
+    // Outer Battlements / Merlons (垛口) & Inner Parapets (女墙)
+    if (!inGatePlatform) {
+      const zOuter = baseZMax - 1;
+      const zInner = baseZMin + 1;
+      const merlonPhase = ((x % 4) + 4) % 4;
+      // Continuous waist parapet + crenelated merlons with arrow slits
+      setVox(x, wallTopY + 1, zOuter, PAL.wallBrick, MAT_SOLID, 7);
+      if (merlonPhase !== 3) {
+        setVox(x, wallTopY + 2, zOuter, PAL.wallBrick, MAT_SOLID, 7);
+        if (merlonPhase === 1) {
+          // Arrow loop / observation slit in center of merlon
+          clearVox(x, wallTopY + 2, zOuter);
+          setVox(x, wallTopY + 3, zOuter, PAL.wallBrickLight, MAT_SOLID, 5);
+        } else {
+          setVox(x, wallTopY + 3, zOuter, PAL.wallBrickLight, MAT_SOLID, 5);
+        }
+      }
+      // Inner parapet wall (leave opening where horse-ramp stairs meet the wall at ax = 32..36)
+      if (!(ax >= 32 && ax <= 36)) {
+        setVox(x, wallTopY + 1, zInner, PAL.wallBrick, MAT_SOLID, 7);
+        if (x % 2 === 0) setVox(x, wallTopY + 2, zInner, PAL.wallBrickLight, MAT_SOLID, 5);
+      }
+    }
+  }
+
+  // Stone steps linking flanking wall walkway (y = 19) up to Central Gate Platform (y = 22)
+  for (const sx of [-1, 1]) {
+    for (let s = 0; s < 4; s++) {
+      fillBox(sx * (30 + s), 19, -6, sx * (30 + s), 22 - s, 6, PAL.plinthStone, MAT_SOLID, 5);
+    }
+    // Wide Inner City Stone Horse-Ramps / Stairways (登城马道) descending from x = ±33 down to ±52
+    for (let step = 0; step <= 18; step++) {
+      const sxPos = sx * (34 + step);
+      const syTop = 19 - step;
+      fillBox(sxPos, 0, -13, sxPos, syTop, -9, PAL.wallBrick, MAT_SOLID, 7);
+      fillBox(sxPos, syTop, -13, sxPos, syTop, -9, PAL.roadStone, MAT_SOLID, 5);
+      // Stepped stair balustrade
+      setVox(sxPos, syTop + 1, -13, PAL.plinthStone, MAT_SOLID, 5);
+      setVox(sxPos, syTop + 2, -13, PAL.marbleShade, MAT_SOLID, 4);
+    }
+  }
+
+  // 2. Carve Central Vaulted Gate Tunnel (城门洞: x = -7..+7, z = -12..+12)
+  const tunnelRadius = 7.2;
+  const springY = 10;
+  for (let z = -12; z <= 12; z++) {
+    for (let x = -8; x <= 8; x++) {
+      for (let y = 1; y <= 19; y++) {
+        const dx = Math.abs(x);
+        const inRect = (dx <= 7 && y <= springY);
+        const dy = y - springY;
+        const distArch = Math.sqrt(dx * dx + dy * dy);
+        const inArch = (y > springY && distArch <= tunnelRadius);
+
+        if (inRect || inArch) {
+          clearVox(x, y, z);
+        } else if (y > springY && distArch <= tunnelRadius + 1.35) {
+          // Decorative brick voussoir arch ring (券脸石/拱券)
+          const ringC = (z === 11 || z === -11 || z === 12 || z === -12) ? PAL.marbleShade : PAL.wallBrickDark;
+          setVox(x, y, z, ringC, MAT_SOLID, 5);
+        }
+      }
+    }
+    // Repave tunnel road floor cleanly at y = 0
+    for (let x = -7; x <= 7; x++) {
+      const rut = (Math.abs(x) === 3) ? -10 : 0; // Subtle ancient cartwheel ruts in stone!
+      setVox(x, 0, z, varyColor(PAL.roadStone, rut), MAT_SOLID, 5);
+    }
+  }
+
+  // Giant Open Double Vermilion Gate Doors (朱漆城门 + 九路鎏金门钉) swung open inside tunnel
+  for (const sx of [-1, 1]) {
+    const doorX = sx * 6;
+    for (let z = 2; z <= 9; z++) {
+      for (let y = 1; y <= 11; y++) {
+        setVox(doorX, y, z, PAL.vermilion, MAT_SOLID, 4);
+        // 9x9 Style Golden Brass Door Studs (门钉)
+        if (y >= 2 && y <= 10 && y % 2 === 0 && z >= 3 && z <= 8) {
+          setVox(doorX - sx, y, z, PAL.goldBright, MAT_GLAZED, 2);
+        }
+      }
+    }
+    // Gilded door knocker ring
+    setVox(doorX - sx, 5, 4, PAL.gold, MAT_GLAZED, 2);
+  }
+  // Glowing lanterns inside the vaulted tunnel ceiling so it looks warm and inviting!
+  buildHangingLantern(0, 16, -6, 1);
+  buildHangingLantern(0, 16, 6, 1);
+
+  // 3. White Marble Balustrade & Battlements around Central Gate Platform (y = 22..25)
+  for (let x = -29; x <= 29; x++) {
+    for (const z of [-11, 11]) {
+      setVox(x, 23, z, PAL.marble, MAT_SOLID, 4);
+      setVox(x, 24, z, x % 3 === 0 ? PAL.marble : PAL.marbleShade, MAT_SOLID, 4);
+      if (x % 3 === 0) setVox(x, 25, z, PAL.marble, MAT_SOLID, 3);
+    }
+  }
+  for (let z = -11; z <= 11; z++) {
+    for (const x of [-29, 29]) {
+      setVox(x, 23, z, PAL.marble, MAT_SOLID, 4);
+      setVox(x, 24, z, PAL.marbleShade, MAT_SOLID, 4);
+    }
+  }
+
+  // 4. GRAND DOUBLE-EAVE XIESHAN CITY GATE TOWER (重檐歇山顶城楼: y = 23..60)
+  // Raised vermilion/stone hall stylobate
+  fillBox(-23, 23, -8, 23, 23, 8, PAL.plinthStone, MAT_SOLID, 5);
+
+  // Lower Story Columns & Vermilion Walls (y = 24..33)
+  const colXs = [-22, -15, -8, -3, 3, 8, 15, 22];
+  const colZs = [-7, 7];
+  for (const px of colXs) {
+    for (const pz of colZs) {
+      fillBox(px, 24, pz, px, 33, pz, PAL.vermilion, MAT_SOLID, 4);
+      setVox(px, 24, pz, PAL.marble, MAT_SOLID, 3); // Column stone base (柱础)
+    }
+  }
+  for (const pz of [-3, 3]) {
+    for (const px of [-22, 22]) {
+      fillBox(px, 24, pz, px, 33, pz, PAL.vermilion, MAT_SOLID, 4);
+      setVox(px, 24, pz, PAL.marble, MAT_SOLID, 3);
+    }
+  }
+
+  // Recessed Timber Hall Walls & Glowing Lattice Windows (x = -19..19, z = -5..5)
+  for (let y = 24; y <= 33; y++) {
+    for (let x = -19; x <= 19; x++) {
+      for (const z of [-5, 5]) {
+        const ax = Math.abs(x);
+        const inCentralDoor = (ax <= 2 && y <= 30);
+        const inWindow = ((ax >= 5 && ax <= 7) || (ax >= 10 && ax <= 13) || (ax >= 16 && ax <= 17)) && (y >= 26 && y <= 30);
+        if (inCentralDoor) {
+          setVox(x, y, z, y % 2 === 0 ? PAL.darkWood : PAL.windowGlow, y % 2 === 0 ? MAT_SOLID : MAT_GLOW, 3);
+        } else if (inWindow) {
+          const isMullion = ((x + y) % 2 === 0);
+          setVox(x, y, z, isMullion ? PAL.beamGreen : PAL.windowGlow, isMullion ? MAT_SOLID : MAT_GLOW, 3);
+        } else {
+          setVox(x, y, z, PAL.vermilionDark, MAT_SOLID, 5);
+        }
+      }
+    }
+    for (let z = -5; z <= 5; z++) {
+      for (const x of [-19, 19]) {
+        const inSideWin = Math.abs(z) <= 2 && y >= 26 && y <= 30;
+        setVox(x, y, z, inSideWin ? PAL.windowGlow : PAL.vermilionDark, inSideWin ? MAT_GLOW : MAT_SOLID, 4);
+      }
+    }
+  }
+
+  // Lower Architrave, Dougong Brackets & Lower Curved Skirt Roof (下层腰檐)
+  buildArchitraveAndDougong(0, 32, 0, 22, 7);
+  buildXieshanRoof({
+    cx: 0, baseY: 34, cz: 0,
+    halfW: 26, halfD: 10, height: 5,
+    skirtOnly: true, innerHalfW: 19, innerHalfD: 6,
+    lanternCorners: true
+  });
+  // Extra lanterns flanking central bay of Gate Tower
+  buildHangingLantern(-5, 34, 10, 2);
+  buildHangingLantern(5, 34, 10, 2);
+  buildHangingLantern(-5, 34, -10, 2);
+  buildHangingLantern(5, 34, -10, 2);
+
+  // Upper Story Hall & Perimeter Balcony (二楼重层: y = 38..46)
+  fillBox(-20, 38, -7, 20, 38, 7, PAL.darkWood, MAT_SOLID, 4);
+  // Ornate red-and-gold upper balcony railing (平座栏杆)
+  for (let x = -20; x <= 20; x++) {
+    for (const z of [-7, 7]) {
+      setVox(x, 39, z, PAL.vermilion, MAT_SOLID, 4);
+      if (x % 2 === 0) setVox(x, 40, z, PAL.gold, MAT_GLAZED, 4);
+    }
+  }
+  for (let z = -7; z <= 7; z++) {
+    for (const x of [-20, 20]) {
+      setVox(x, 39, z, PAL.vermilion, MAT_SOLID, 4);
+      if (z % 2 === 0) setVox(x, 40, z, PAL.gold, MAT_GLAZED, 4);
+    }
+  }
+
+  // Upper Hall Columns & Windows (x = -17..17, z = -5..5, y = 39..46)
+  for (const px of [-17, -11, -5, 5, 11, 17]) {
+    for (const pz of [-5, 5]) {
+      fillBox(px, 39, pz, px, 46, pz, PAL.vermilion, MAT_SOLID, 4);
+    }
+  }
+  for (let y = 39; y <= 45; y++) {
+    for (let x = -16; x <= 16; x++) {
+      for (const z of [-4, 4]) {
+        const ax = Math.abs(x);
+        const glow = (ax <= 3 || (ax >= 7 && ax <= 9) || (ax >= 13 && ax <= 15)) && y >= 40 && y <= 44;
+        const isFrame = ((x + y) % 2 === 0);
+        setVox(x, y, z, glow ? (isFrame ? PAL.beamGreen : PAL.windowGlow) : PAL.vermilionDark, (glow && !isFrame) ? MAT_GLOW : MAT_SOLID, 4);
+      }
+    }
+    for (let z = -4; z <= 4; z++) {
+      for (const x of [-16, 16]) {
+        setVox(x, y, z, PAL.vermilionDark, MAT_SOLID, 5);
+      }
+    }
+  }
+
+  // Upper Architrave, Dougong & Monumental Upper Xieshan Main Roof (上层重檐大顶: y = 47..59)
+  buildArchitraveAndDougong(0, 45, 0, 17, 5);
+  buildXieshanRoof({
+    cx: 0, baseY: 47, cz: 0,
+    halfW: 22, halfD: 9, height: 9,
+    skirtOnly: false,
+    lanternCorners: true
+  });
+
+  // IMPERIAL GATE PLAQUE (城门匾额: "太 平 門" in crisp gold relief voxels on ultramarine lacquer!)
+  for (const sz of [-1, 1]) {
+    const pz = sz * 8;
+    fillBox(-8, 37, pz, 8, 43, pz, PAL.gold, MAT_GLAZED, 3);
+    fillBox(-7, 38, pz, 7, 42, pz, PAL.plaqueBlue, MAT_SOLID, 2);
+    // 5x5 pixel-art Chinese glyphs (left to right from viewer facing gate)
+    // Character 1: 太, Character 2: 平, Character 3: 門
+    const glyphs = [
+      // 太
+      ["00100","11111","00100","01010","10101"],
+      // 平
+      ["11111","01010","11111","00100","00100"],
+      // 門
+      ["11011","11011","10001","10001","10001"]
+    ];
+    for (let g = 0; g < 3; g++) {
+      const gxCenter = (g - 1) * 5 * sz; // Reads left-to-right from outside (+z) and inside (-z)
+      const rows = glyphs[g];
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 5; c++) {
+          if (rows[r][c] === '1') {
+            const wx = gxCenter + (c - 2) * sz;
+            const wy = 42 - r;
+            setVox(wx, wy, pz, PAL.goldBright, MAT_GLAZED, 1);
+          }
+        }
+      }
+    }
+  }
+
+  // War Drum (战鼓), Bronze Braziers (火盆) & Weapon Racks atop the Gate Platform
+  // War drum on east terrace (x = +25, z = +5, y = 23..26)
+  fillBox(24, 23, 4, 26, 24, 6, PAL.vermilion, MAT_SOLID, 3);
+  fillBox(24, 25, 4, 26, 26, 6, PAL.straw, MAT_SOLID, 4);
+  setVox(25, 25, 6, PAL.vermilionBright, MAT_SOLID, 2);
+  setVox(25, 25, 4, PAL.vermilionBright, MAT_SOLID, 2);
+
+  // Glowing Iron Braziers on Gate Platform & Flanking Bastions
+  const brazierSpots = [
+    [-26, 23, 8], [26, 23, 8], [-10, 1, 14], [10, 1, 14],
+    [-55, 21, 12], [55, 21, 12]
+  ];
+  for (const [bx, by, bz] of brazierSpots) {
+    setVox(bx, by, bz, PAL.roofCharcoal, MAT_SOLID, 3);
+    setVox(bx, by + 1, bz, PAL.roofCharcoal, MAT_SOLID, 3);
+    setVox(bx, by + 2, bz, PAL.fireOrange, MAT_GLOW, 5);
+  }
+
+  // 5. Flanking Watch Bastion Pavilions (敌楼 at x = -55 and x = +55, y = 21..33)
+  for (const bx of [-55, 55]) {
+    fillBox(bx - 5, 21, -4, bx + 5, 21, 10, PAL.plinthStone, MAT_SOLID, 5);
+    for (const px of [bx - 4, bx + 4]) {
+      for (const pz of [-3, 3, 9]) {
+        fillBox(px, 22, pz, px, 27, pz, PAL.vermilion, MAT_SOLID, 4);
+      }
+    }
+    fillBox(bx - 3, 22, -2, bx + 3, 26, 8, PAL.vermilionDark, MAT_SOLID, 5);
+    // Glowing watch windows
+    for (const wz of [0, 6]) {
+      setVox(bx - 3, 24, wz, PAL.windowGlow, MAT_GLOW, 3);
+      setVox(bx + 3, 24, wz, PAL.windowGlow, MAT_GLOW, 3);
+    }
+    setVox(bx, 24, 8, PAL.windowGlow, MAT_GLOW, 3);
+    buildArchitraveAndDougong(bx, 27, 3, 4, 6);
+    buildXieshanRoof({
+      cx: bx, baseY: 28, cz: 3,
+      halfW: 7, halfD: 9, height: 5,
+      skirtOnly: false, lanternCorners: true
+    });
+  }
+
+  // Checkpoint Booth, Wooden Cheval-de-Frise Barrier (拒马) & Imperial Notice Board outside Gate
+  // Notice board at x = -15, z = 15
+  fillBox(-17, 1, 15, -17, 6, 15, PAL.darkWood, MAT_SOLID, 4);
+  fillBox(-13, 1, 15, -13, 6, 15, PAL.darkWood, MAT_SOLID, 4);
+  fillBox(-17, 3, 15, -13, 5, 15, PAL.whiteWall, MAT_SOLID, 3);
+  setVox(-15, 5, 15, PAL.vermilionBright, MAT_SOLID, 2); // Imperial red seal on notice!
+  fillBox(-18, 6, 14, -12, 7, 16, PAL.roofCharcoal, MAT_GLAZED, 5);
+
+  // Guard weapon rack & wooden inspection table at x = +14, z = +15
+  fillBox(13, 1, 14, 16, 2, 15, PAL.warmWood, MAT_SOLID, 5);
+  for (let wx = 18; wx <= 21; wx++) {
+    setVox(wx, 1, 14, PAL.darkWood, MAT_SOLID, 4);
+    if (wx % 2 === 0) {
+      fillBox(wx, 2, 14, wx, 6, 14, PAL.lightWood, MAT_SOLID, 3);
+      setVox(wx, 7, 14, 0xd8dee6, MAT_GLAZED, 2); // Steel spearhead
+    }
+  }
+}
+
+// ============================================================================
+// 6. WORLD GENERATION — PART B: INNER CITY SHOPS, PAGODA & OUTER LANDSCAPE
+// ============================================================================
+
+function buildTimberShop({
+  x1, x2, z1, z2, stories = 2, faceEast = false,
+  roofTile = PAL.roofSlate, roofTrim = PAL.roofJade,
+  signColor = PAL.plaqueBlue
+}) {
+  const cx = Math.round((x1 + x2) * 0.5);
+  const cz = Math.round((z1 + z2) * 0.5);
+  const halfW = Math.round((x2 - x1) * 0.5);
+  const halfD = Math.round((z2 - z1) * 0.5);
+  const frontX = faceEast ? x2 : x1;
+  const dirX = faceEast ? 1 : -1;
+
+  // Stone foundation
+  fillBox(x1, 1, z1, x2, 1, z2, PAL.plinthStone, MAT_SOLID, 5);
+
+  // Ground floor (y = 2..8): Open market arcade in front, whitewashed/brick walls on sides & back
+  for (let y = 2; y <= 8; y++) {
+    for (let z = z1; z <= z2; z++) {
+      // Back wall
+      const backX = faceEast ? x1 : x2;
+      setVox(backX, y, z, PAL.whiteWall, MAT_SOLID, 5);
+      // Recessed counter & warm shop interior wall
+      const innerFrontX = frontX - dirX * 2;
+      const isDoor = Math.abs(z - cz) <= 2 && y <= 6;
+      const isWin = Math.abs(z - cz) >= 4 && Math.abs(z - cz) <= 6 && y >= 4 && y <= 6;
+      if (isDoor) {
+        if (y === 6) setVox(innerFrontX, y, z, PAL.darkWood, MAT_SOLID, 4);
+        else setVox(innerFrontX - dirX * 2, y, z, PAL.windowGlow, MAT_GLOW, 3); // Deep glowing interior
+      } else if (isWin) {
+        setVox(innerFrontX, y, z, (y + z) % 2 === 0 ? PAL.darkWood : PAL.windowGlow, (y + z) % 2 === 0 ? MAT_SOLID : MAT_GLOW, 3);
+      } else {
+        setVox(innerFrontX, y, z, y <= 3 ? PAL.warmWood : PAL.whiteWall, MAT_SOLID, 5);
+      }
+    }
+    for (let x = x1; x <= x2; x++) {
+      setVox(x, y, z1, PAL.wallBrick, MAT_SOLID, 7);
+      setVox(x, y, z2, PAL.wallBrick, MAT_SOLID, 7);
+    }
+  }
+
+  // Front Arcade Vermilion Pillars & Shop Counter
+  for (let z = z1; z <= z2; z += 4) {
+    fillBox(frontX, 2, z, frontX, 8, z, PAL.vermilion, MAT_SOLID, 4);
+  }
+  fillBox(frontX, 2, z2, frontX, 8, z2, PAL.vermilion, MAT_SOLID, 4);
+  // Wooden shop counter along half of storefront
+  fillBox(frontX - dirX, 2, z1 + 2, frontX, 3, cz - 2, PAL.warmWood, MAT_SOLID, 4);
+
+  // Gilded Horizontal Shop Signboard (商铺金字招牌)
+  fillBox(frontX + dirX, 7, cz - 4, frontX + dirX, 9, cz + 4, PAL.gold, MAT_GLAZED, 3);
+  fillBox(frontX + dirX, 8, cz - 3, frontX + dirX, 8, cz + 3, signColor, MAT_SOLID, 2);
+  for (const szOff of [-2, 0, 2]) {
+    setVox(frontX + dirX, 8, cz + szOff, PAL.goldBright, MAT_GLAZED, 1);
+  }
+
+  if (stories === 1) {
+    buildXieshanRoof({
+      cx, baseY: 9, cz,
+      halfW: halfW + 2, halfD: halfD + 2, height: 5,
+      tileColor: roofTile, trimColor: roofTrim, lanternCorners: true
+    });
+    return;
+  }
+
+  // Projecting 2nd-story Balcony & Skirt Eave (y = 9..15)
+  const balX1 = faceEast ? x1 : x1 - 2;
+  const balX2 = faceEast ? x2 + 2 : x2;
+  fillBox(balX1, 9, z1 - 1, balX2, 9, z2 + 1, PAL.darkWood, MAT_SOLID, 4);
+
+  // Balcony Railing facing main street
+  const railX = frontX + dirX * 2;
+  for (let z = z1 - 1; z <= z2 + 1; z++) {
+    setVox(railX, 10, z, PAL.vermilion, MAT_SOLID, 4);
+    if (z % 2 === 0) setVox(railX, 11, z, PAL.gold, MAT_GLAZED, 3);
+  }
+  buildHangingLantern(railX, 8, z1 + 1, 1);
+  buildHangingLantern(railX, 8, z2 - 1, 1);
+  buildHangingLantern(railX, 8, cz, 1);
+
+  // Upper floor columns & glowing lattice windows
+  for (let y = 10; y <= 15; y++) {
+    for (let z = z1; z <= z2; z++) {
+      const backX = faceEast ? x1 : x2;
+      setVox(backX, y, z, PAL.whiteWall, MAT_SOLID, 5);
+      const winGlow = (Math.abs(z - cz) <= 6 && y >= 11 && y <= 14);
+      const mullion = ((y + z) % 2 === 0);
+      setVox(frontX, y, z, winGlow ? (mullion ? PAL.vermilion : PAL.windowGlow) : PAL.vermilionDark, (winGlow && !mullion) ? MAT_GLOW : MAT_SOLID, 4);
+    }
+    for (let x = x1; x <= x2; x++) {
+      setVox(x, y, z1, PAL.whiteWall, MAT_SOLID, 5);
+      setVox(x, y, z2, PAL.whiteWall, MAT_SOLID, 5);
+    }
+  }
+  for (const zz of [z1, cz - 4, cz + 4, z2]) {
+    fillBox(railX, 10, zz, railX, 15, zz, PAL.vermilion, MAT_SOLID, 4);
+  }
+
+  // Upper Curved Roof
+  buildXieshanRoof({
+    cx: Math.round((balX1 + balX2) * 0.5), baseY: 16, cz,
+    halfW: halfW + 3, halfD: halfD + 2, height: 6,
+    tileColor: roofTile, trimColor: roofTrim, lanternCorners: true
+  });
+}
+
+function buildCanopyStall(x1, x2, z1, z2, c1, c2) {
+  // Corner bamboo/wood posts
+  for (const px of [x1, x2]) {
+    for (const pz of [z1, z2]) {
+      fillBox(px, 1, pz, px, 5, pz, PAL.warmWood, MAT_SOLID, 4);
+    }
+  }
+  // Sloped striped cloth canopy
+  for (let z = z1 - 1; z <= z2 + 1; z++) {
+    for (let x = x1 - 1; x <= x2 + 1; x++) {
+      const slope = Math.abs(x) < 15 ? 6 : 5;
+      const stripe = (Math.floor((z - z1) / 2) % 2 === 0) ? c1 : c2;
+      setVox(x, slope, z, stripe, MAT_SOLID, 5);
+    }
+  }
+}
+
+function buildWenfengPagoda(cx, cz) {
+  // 5-Story Octagonal-style Traditional Brick & Timber Pagoda (文峰塔, y = 1..54)
+  fillBox(cx - 10, 1, cz - 10, cx + 10, 3, cz + 10, PAL.marbleShade, MAT_SOLID, 5);
+  fillBox(cx - 8, 4, cz - 8, cx + 8, 4, cz + 8, PAL.marble, MAT_SOLID, 4);
+
+  let curY = 5;
+  const widths = [7, 6, 5, 4, 3];
+  const heights = [7, 6, 6, 5, 5];
+
+  for (let tier = 0; tier < 5; tier++) {
+    const w = widths[tier];
+    const h = heights[tier];
+    for (let y = curY; y < curY + h; y++) {
+      for (let dz = -w; dz <= w; dz++) {
+        for (let dx = -w; dx <= w; dx++) {
+          if (Math.abs(dx) + Math.abs(dz) > w * 1.55) continue;
+          const isArchWin = (Math.abs(dx) <= 1 || Math.abs(dz) <= 1) && y >= curY + 1 && y <= curY + h - 2;
+          const isPillar = (Math.abs(dx) === w || Math.abs(dz) === w);
+          setVox(cx + dx, y, cz + dz, isArchWin ? PAL.windowGlow : (isPillar ? PAL.vermilion : PAL.vermilionDark), isArchWin ? MAT_GLOW : MAT_SOLID, 4);
+        }
+      }
+    }
+    buildXieshanRoof({
+      cx, baseY: curY + h, cz,
+      halfW: w + 3, halfD: w + 3, height: 3,
+      tileColor: PAL.roofCharcoal, trimColor: PAL.roofJade,
+      lanternCorners: tier < 2
+    });
+    curY += h + 3;
+  }
+  // Golden Buddhist Spire Finial (塔刹)
+  fillBox(cx, curY, cz, cx, curY + 6, cz, PAL.goldBright, MAT_GLAZED, 2);
+  fillBox(cx - 1, curY + 1, cz - 1, cx + 1, curY + 2, cz + 1, PAL.gold, MAT_GLAZED, 3);
+}
+
+function buildCourtyardCompound(cx, cz, halfW, halfD, treeColor = PAL.ginkgoGold) {
+  // Whitewashed Huizhou / Northern brick enclosure wall with dark tile coping
+  for (let x = cx - halfW; x <= cx + halfW; x++) {
+    for (const z of [cz - halfD, cz + halfD]) {
+      if (Math.abs(x - cx) <= 2 && z === cz + halfD) continue; // Courtyard gate
+      fillBox(x, 1, z, x, 5, z, PAL.whiteWall, MAT_SOLID, 5);
+      setVox(x, 6, z, PAL.roofCharcoal, MAT_GLAZED, 5);
+    }
+  }
+  for (let z = cz - halfD; z <= cz + halfD; z++) {
+    for (const x of [cx - halfW, cx + halfW]) {
+      fillBox(x, 1, z, x, 5, z, PAL.whiteWall, MAT_SOLID, 5);
+      // Stepped Horse-head Gable Wall accent (马头墙)
+      const step = Math.abs(z - cz) < halfD * 0.4 ? 2 : (Math.abs(z - cz) < halfD * 0.75 ? 1 : 0);
+      fillBox(x, 6, z, x, 6 + step, z, PAL.whiteWall, MAT_SOLID, 4);
+      setVox(x, 7 + step, z, PAL.roofCharcoal, MAT_GLAZED, 4);
+    }
+  }
+  // Main Hall inside courtyard
+  fillBox(cx - halfW + 3, 1, cz - halfD + 3, cx + halfW - 3, 8, cz - 2, PAL.whiteWall, MAT_SOLID, 5);
+  setVox(cx, 4, cz - 2, PAL.windowGlow, MAT_GLOW, 3);
+  setVox(cx - 3, 4, cz - 2, PAL.windowGlow, MAT_GLOW, 3);
+  setVox(cx + 3, 4, cz - 2, PAL.windowGlow, MAT_GLOW, 3);
+  buildXieshanRoof({
+    cx, baseY: 9, cz: cz - Math.round(halfD * 0.45),
+    halfW: halfW - 1, halfD: 6, height: 4,
+    tileColor: PAL.roofSlate, trimColor: PAL.roofCharcoal, lanternCorners: false
+  });
+  // Courtyard ornamental tree (golden ginkgo or crimson maple!)
+  fillBox(cx + 3, 1, cz + 4, cx + 3, 6, cz + 4, PAL.darkWood, MAT_SOLID, 5);
+  fillEllipsoid(cx + 3, 9, cz + 4, 4.5, 3.8, 4.5, treeColor, MAT_SOLID, 16, 0.85);
+}
+
+function buildInnerCityMarket() {
+  // 1. EAST SIDE OF MAIN AVENUE (x > 0, facing West toward x = 0: faceEast = false)
+  // A) Grand 2-Story Tavern "醉仙楼" (x = 14..30, z = -44..-24)
+  buildTimberShop({
+    x1: 14, x2: 30, z1: -44, z2: -24, stories: 2, faceEast: false,
+    roofTile: PAL.roofCharcoal, roofTrim: PAL.roofJade, signColor: PAL.vermilionDark
+  });
+  // Upstairs balcony dining tables & wine jugs on 醉仙楼 veranda (x = 12..13, y = 10..11)
+  for (const tz of [-39, -34, -29]) {
+    setVox(13, 10, tz, PAL.warmWood, MAT_SOLID, 3);
+    setVox(13, 11, tz, PAL.marble, MAT_GLAZED, 2); // Porcelain wine pot
+  }
+  // Stacked terracotta wine jars with red cloth lids outside tavern (x = 12..13, z = -26..-23)
+  for (const [jx, jz] of [[12, -25], [13, -25], [13, -24], [12, -43], [13, -43]]) {
+    setVox(jx, 1, jz, 0x8b4a32, MAT_SOLID, 5);
+    setVox(jx, 2, jz, PAL.vermilionBright, MAT_SOLID, 3);
+  }
+  // Tall Bamboo Wine Banner Pole (酒幌竿) at x = 11, z = -22
+  fillBox(11, 1, -22, 11, 16, -22, PAL.bamboo, MAT_SOLID, 4);
+  fillBox(11, 15, -26, 11, 15, -22, PAL.bamboo, MAT_SOLID, 4);
+
+  // B) Steamed Bun & Roadside Tea Stall (包子茶寮: x = 11..20, z = -54..-46)
+  buildCanopyStall(11, 20, -54, -47, 0x355c7d, 0xeae3d2);
+  // Brick Hearth Stove & Stacked Round Bamboo Steamers (蒸笼)!
+  fillBox(12, 1, -49, 14, 2, -48, PAL.wallBrickDark, MAT_SOLID, 5);
+  setVox(12, 1, -48, PAL.fireOrange, MAT_GLOW, 4); // Glowing stove fire!
+  fillBox(13, 3, -49, 13, 6, -49, PAL.straw, MAT_SOLID, 5); // Tall stack of bamboo steamers
+  fillBox(12, 3, -48, 12, 5, -48, PAL.straw, MAT_SOLID, 5);
+  // Outdoor wooden tea tables & benches
+  for (const tz of [-53, -50]) {
+    fillBox(16, 1, tz, 17, 2, tz + 1, PAL.warmWood, MAT_SOLID, 4);
+    setVox(16, 3, tz, 0x3b7a9e, MAT_GLAZED, 3); // Blue-and-white teapot
+    setVox(15, 1, tz, PAL.lightWood, MAT_SOLID, 4);
+    setVox(18, 1, tz + 1, PAL.lightWood, MAT_SOLID, 4);
+  }
+
+  // C) Blacksmith, Porcelain & Lantern Shop (x = 14..29, z = -85..-65)
+  buildTimberShop({
+    x1: 14, x2: 29, z1: -85, z2: -65, stories: 2, faceEast: false,
+    roofTile: PAL.roofSlate, roofTrim: PAL.gold, signColor: PAL.plaqueBlue
+  });
+  // Glowing Blacksmith Forge & Anvil at south end (x = 12..14, z = -68..-66)
+  fillBox(13, 1, -67, 15, 3, -66, PAL.wallBrickDark, MAT_SOLID, 5);
+  setVox(13, 2, -67, PAL.fireOrange, MAT_GLOW, 4);
+  setVox(11, 1, -67, 0x3b4048, MAT_GLAZED, 2); // Iron anvil
+  // Blue-and-White Porcelain Vases display rack (x = 12, z = -82..-78)
+  fillBox(12, 1, -82, 12, 2, -78, PAL.darkWood, MAT_SOLID, 4);
+  for (let pz = -82; pz <= -78; pz += 2) {
+    setVox(12, 3, pz, PAL.marble, MAT_GLAZED, 2);
+    setVox(12, 4, pz, PAL.beamBlue, MAT_GLAZED, 2);
+  }
+
+  // D) Far East Avenue Tea & Medicine Hall (x = 14..28, z = -112..-90)
+  buildTimberShop({
+    x1: 14, x2: 28, z1: -112, z2: -90, stories: 1, faceEast: false,
+    roofTile: PAL.roofCharcoal, roofTrim: PAL.roofJade
+  });
+
+  // 2. WEST SIDE OF MAIN AVENUE (x < 0, facing East toward x = 0: faceEast = true)
+  // A) Silk & Brocade Emporium "锦绣绸缎庄" (x = -30..-14, z = -43..-24)
+  buildTimberShop({
+    x1: -30, x2: -14, z1: -43, z2: -24, stories: 2, faceEast: true,
+    roofTile: PAL.roofCharcoal, roofTrim: PAL.gold, signColor: 0x5c193d
+  });
+  // Colorful Bolts of Silk on Outdoor Display Racks (x = -12, z = -41..-26)
+  const silkColors = [0xd93870, 0x28a89e, 0xeab949, 0xd94b38, 0x5e4fa2];
+  for (let i = 0; i < 5; i++) {
+    const sz = -40 + i * 3;
+    setVox(-12, 1, sz, PAL.darkWood, MAT_SOLID, 3);
+    fillBox(-12, 2, sz, -12, 4, sz + 1, silkColors[i], MAT_GLAZED, 4);
+  }
+
+  // B) Fresh Fruit, Vegetable & Candied-Hawthorn Stalls (x = -20..-11, z = -54..-46)
+  buildCanopyStall(-20, -11, -54, -46, 0xb84b39, 0xf0dfc8);
+  // Slanted produce crates (oranges, jade melons, red apples, cabbages)
+  const produce = [0xf28524, 0x5ca846, 0xd63229, 0xe8c538];
+  for (let i = 0; i < 4; i++) {
+    const pz = -53 + i * 2;
+    fillBox(-13, 1, pz, -12, 1, pz + 1, PAL.warmWood, MAT_SOLID, 4);
+    fillBox(-13, 2, pz, -12, 2, pz + 1, produce[i], MAT_SOLID, 6);
+  }
+  // Candied Hawthorn Post (冰糖葫芦草靶) at x = -10, z = -46
+  fillBox(-10, 1, -46, -10, 4, -46, PAL.straw, MAT_SOLID, 3);
+  setVox(-10, 5, -46, PAL.lanternRed, MAT_GLAZED, 2);
+  setVox(-9, 4, -46, PAL.lanternRed, MAT_GLAZED, 2);
+  setVox(-11, 4, -46, PAL.lanternRed, MAT_GLAZED, 2);
+
+  // C) Spice, Grain & Bookshop along West Street (x = -29..-14, z = -86..-65 & -112..-90)
+  buildTimberShop({
+    x1: -29, x2: -14, z1: -86, z2: -65, stories: 2, faceEast: true,
+    roofTile: PAL.roofSlate, roofTrim: PAL.roofJade, signColor: PAL.plaqueBlue
+  });
+  // Stacked burlap grain sacks out front
+  fillBox(-12, 1, -72, -11, 2, -69, 0xc7a876, MAT_SOLID, 7);
+  setVox(-12, 3, -71, 0xc7a876, MAT_SOLID, 7);
+
+  buildTimberShop({
+    x1: -28, x2: -14, z1: -112, z2: -90, stories: 1, faceEast: true,
+    roofTile: PAL.roofCharcoal, roofTrim: PAL.gold
+  });
+
+  // 3. INNER CITY NEIGHBORHOODS: WENFENG PAGODA, COURTYARDS, ANCIENT TREES & WELL
+  buildWenfengPagoda(-68, -76);
+
+  buildCourtyardCompound(56, -38, 13, 14, PAL.ginkgoGold);
+  buildCourtyardCompound(58, -82, 14, 15, PAL.mapleRed);
+  buildCourtyardCompound(-56, -36, 13, 13, PAL.ginkgoGold);
+  buildCourtyardCompound(-66, -106, 12, 12, PAL.willowLeaf);
+  buildCourtyardCompound(86, -60, 12, 13, PAL.willowLeaf);
+
+  // Ancient Scholar Tree (古槐树) & Public Stone Well (古井) at inner cross-plaza (x = 34, z = -58)
+  fillBox(35, 1, -59, 39, 2, -55, PAL.plinthStone, MAT_SOLID, 5);
+  fillColumn(37, 2, 11, -57, 1.4, PAL.darkWood, MAT_SOLID, 6);
+  fillEllipsoid(37, 14, -57, 7, 5, 7, PAL.willowLeaf, MAT_SOLID, 15, 0.85);
+  fillEllipsoid(34, 12, -55, 5, 4, 5, PAL.willowLight, MAT_SOLID, 14, 0.82);
+  // Red prayer ribbons hanging from ancient tree
+  setVox(33, 9, -57, PAL.lanternRed, MAT_SOLID, 2);
+  setVox(39, 10, -54, PAL.lanternRed, MAT_SOLID, 2);
+
+  // Stone Well at x = -35, z = -58
+  fillBox(-37, 1, -60, -33, 2, -56, PAL.marbleShade, MAT_SOLID, 5);
+  clearBox(-36, 1, -59, -34, 2, -57);
+  setVox(-35, 1, -58, PAL.waterDeep, MAT_WATER, 3);
+  fillBox(-37, 3, -58, -37, 6, -58, PAL.darkWood, MAT_SOLID, 4);
+  fillBox(-33, 3, -58, -33, 6, -58, PAL.darkWood, MAT_SOLID, 4);
+  fillBox(-38, 7, -60, -32, 7, -56, PAL.roofCharcoal, MAT_GLAZED, 5);
+}
+
+// ============================================================================
+// 7. SCENIC OUTER LANDSCAPE: PAVILION, WATERMILL, TREES, KARST PEAKS & WATERFALL
+// ============================================================================
+function buildWeepingWillow(cx, cz) {
+  const baseY = Math.max(0, Math.round(getVoxTopSolid(cx, cz)));
+  // Slightly leaning gnarled trunk
+  for (let i = 0; i <= 9; i++) {
+    const tx = cx + Math.round(Math.sin(i * 0.25) * 1.2);
+    fillColumn(tx, baseY + i, baseY + i + 1, cz, i < 3 ? 1.3 : 0.9, PAL.darkWood, MAT_SOLID, 6);
+  }
+  const crownY = baseY + 11;
+  fillEllipsoid(cx, crownY, cz, 6.5, 3.8, 6.5, PAL.willowLeaf, MAT_SOLID, 14, 0.78);
+  // Cascading weeping willow curtains (垂柳丝) hanging down toward water/grass!
+  for (let a = 0; a < 16; a++) {
+    const ang = (a / 16) * Math.PI * 2;
+    const r = 4.2 + (a % 3) * 1.1;
+    const vx = Math.round(cx + Math.cos(ang) * r);
+    const vz = Math.round(cz + Math.sin(ang) * r);
+    const dropLen = 5 + (a % 4);
+    for (let dy = 0; dy < dropLen; dy++) {
+      setVox(vx, crownY - dy, vz, dy > dropLen - 3 ? PAL.willowLight : PAL.willowLeaf, MAT_SOLID, 12);
+    }
+  }
+}
+
+function buildPeachBlossomTree(cx, cz) {
+  const baseY = Math.max(0, getVoxTopSolid(cx, cz));
+  for (let i = 0; i <= 6; i++) {
+    setVox(cx + (i > 3 ? 1 : 0), baseY + i, cz, PAL.darkWood, MAT_SOLID, 5);
+    setVox(cx, baseY + i, cz, PAL.darkWood, MAT_SOLID, 5);
+  }
+  fillEllipsoid(cx, baseY + 8, cz, 4.8, 3.2, 4.8, PAL.peachPink, MAT_SOLID, 14, 0.8);
+  fillEllipsoid(cx + 2, baseY + 7, cz + 1, 3.5, 2.5, 3.5, PAL.peachLight, MAT_SOLID, 12, 0.75);
+  fillEllipsoid(cx - 2, baseY + 7, cz - 1, 3.2, 2.4, 3.2, PAL.peachDark, MAT_SOLID, 12, 0.7);
+}
+
+function buildCliffPine(cx, baseY, cz, leanDirX = -1) {
+  for (let i = 0; i <= 7; i++) {
+    const px = cx + Math.round((i / 7) * 3 * leanDirX);
+    const py = baseY + Math.round(i * 0.85);
+    fillBox(px, py, cz, px + 1, py + 1, cz, PAL.darkWood, MAT_SOLID, 5);
+  }
+  // Layered flat horizontal Chinese pine pads (迎客松翠盖)
+  const tipX = cx + 3 * leanDirX;
+  fillEllipsoid(tipX, baseY + 7, cz, 5.5, 1.6, 4.5, PAL.pineNeedles, MAT_SOLID, 10, 0.88);
+  fillEllipsoid(cx + leanDirX, baseY + 9, cz + 1, 4.2, 1.5, 3.8, PAL.pineDark, MAT_SOLID, 10, 0.88);
+  fillEllipsoid(tipX + 2 * leanDirX, baseY + 5, cz - 1, 4.0, 1.4, 3.5, PAL.pineNeedles, MAT_SOLID, 10, 0.85);
+}
+
+function getVoxTopSolid(x, z) {
+  for (let y = 45; y >= -4; y--) {
+    if (isOpaque(x, y, z)) return y;
+  }
+  return 0;
+}
+
+function buildHexWaysidePavilion(cx, cz) {
+  // Raised mossy hillock & stone stairs (十里长亭 at x = -34, z = 62)
+  fillEllipsoid(cx, 1, cz, 11, 4.5, 11, PAL.grassLush, MAT_SOLID, 10, 1.0);
+  fillCylinderFlat(cx, 1, 5, cz, 6.5, PAL.plinthStone);
+  fillCylinderFlat(cx, 5, 5, cz, 6.0, PAL.marble);
+  // Stone steps facing East toward the Post Road
+  for (let s = 0; s < 5; s++) {
+    fillBox(cx + 6 + s, 1, cz - 2, cx + 6 + s, 5 - s, cz + 2, PAL.marbleShade, MAT_SOLID, 4);
+  }
+  // 6 Vermilion Columns arranged hexagonally
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    const px = Math.round(cx + Math.cos(ang) * 4.6);
+    const pz = Math.round(cz + Math.sin(ang) * 4.6);
+    fillBox(px, 6, pz, px, 12, pz, PAL.vermilion, MAT_SOLID, 3);
+    if (i % 2 === 0) buildHangingLantern(px, 12, pz, 1);
+  }
+  // Stone bench & poetry table in center
+  fillBox(cx - 1, 6, cz - 1, cx + 1, 7, cz + 1, PAL.marble, MAT_SOLID, 3);
+
+  // Sweeping Hexagonal Spire Roof (六角攒尖顶)
+  for (let dz = -8; dz <= 8; dz++) {
+    for (let dx = -8; dx <= 8; dx++) {
+      const r = Math.sqrt(dx * dx + dz * dz);
+      if (r > 7.8) continue;
+      const prog = Math.max(0, 1 - r / 7.8);
+      const lift = r > 5.8 ? (r - 5.8) * 0.9 : 0;
+      const ry = Math.round(13 + Math.pow(prog, 1.55) * 6.5 + lift);
+      const isEdge = r > 6.6;
+      setVox(cx + dx, ry, cz + dz, isEdge ? PAL.roofJadeBright : PAL.roofCharcoal, MAT_GLAZED, 6);
+      setVox(cx + dx, ry - 1, cz + dz, PAL.darkWood, MAT_SOLID, 4);
+    }
+  }
+  fillBox(cx, 20, cz, cx, 22, cz, PAL.goldBright, MAT_GLAZED, 2);
+}
+
+function fillCylinderFlat(cx, y1, y2, cz, r, col) {
+  const ir = Math.ceil(r);
+  for (let y = y1; y <= y2; y++) {
+    for (let dz = -ir; dz <= ir; dz++) {
+      for (let dx = -ir; dx <= ir; dx++) {
+        if (dx * dx + dz * dz <= r * r) setVox(cx + dx, y, cz + dz, col, MAT_SOLID, 5);
+      }
+    }
+  }
+}
+
+function buildKarstPeak(cx, cz, radiusX, radiusZ, peakHeight, hasWaterfall = false) {
+  const rx = Math.ceil(radiusX + 4), rz = Math.ceil(radiusZ + 4);
+  for (let dz = -rz; dz <= rz; dz++) {
+    for (let dx = -rx; dx <= rx; dx++) {
+      const wx = cx + dx, wz = cz + dz;
+      if (wx < X_MIN || wx > X_MAX || wz < Z_MIN || wz > Z_MAX) continue;
+      const nx = dx / radiusX, nz = dz / radiusZ;
+      const d2 = nx * nx + nz * nz;
+      if (d2 > 1.25) continue;
+
+      const n = fbm2(wx * 1.4 + 50, wz * 1.4 - 30);
+      const ridge = Math.abs(Math.sin(wx * 0.11 + wz * 0.08)) * 0.22;
+      const profile = Math.pow(Math.max(0, 1.08 - d2 + (n - 0.5) * 0.38), 1.35);
+      const colH = Math.round((profile + ridge * (1 - d2)) * peakHeight);
+      if (colH <= 1) continue;
+
+      for (let y = 0; y <= colH; y++) {
+        // Carve waterfall chute on south-west face if requested
+        if (hasWaterfall && dx >= -3 && dx <= 3 && dz < 0 && y > 3) {
+          if (Math.abs(dx) <= 2 && dz <= -radiusZ * 0.35) {
+            setVox(wx, y, wz, (y % 4 === 0) ? PAL.waterFoam : PAL.waterShallow, MAT_WATER, 6);
+            continue;
+          }
+        }
+        const isTop = y >= colH - 2;
+        const isLedge = (y % 9 === 0 && n > 0.48);
+        let c = PAL.cliffGrey;
+        if (isTop || isLedge) c = PAL.cliffMoss;
+        else if (y < 6) c = PAL.earth;
+        else if ((y + wx) % 7 === 0) c = PAL.cliffDark;
+        setVox(wx, y, wz, c, MAT_SOLID, 10);
+      }
+    }
+  }
+}
+
+function buildOuterScenicLandscape() {
+  // 1. Moat Lotus Pads (荷叶), Pink Lotus Flowers (荷花) & Reeds
+  for (let x = -115; x <= 115; x += 5) {
+    if (Math.abs(x) <= 13) continue; // Keep bridge arches clear
+    const h = hash2(x, 30);
+    if (h > 0.38) {
+      const lz = Math.round(21 + hash2(x, 77) * 17);
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (Math.abs(dx) + Math.abs(dz) <= 2) {
+            setVox(x + dx, -1, lz + dz, PAL.lotusPad, MAT_SOLID, 8);
+          }
+        }
+      }
+      if (h > 0.66) setVox(x, 0, lz, PAL.lotusPink, MAT_SOLID, 5);
+    }
+  }
+
+  // 2. Hexagonal Wayside Farewell Pavilion (十里长亭) on West Knoll
+  buildHexWaysidePavilion(-34, 62);
+
+  // 3. Golden Terraced Farmlands (层层金色梯田) on East Slopes (x = 64..115, z = 48..84)
+  for (let z = 48; z <= 84; z++) {
+    for (let x = 64; x <= 118; x++) {
+      const dist = Math.sqrt((x - 60) * (x - 60) * 0.6 + (z - 45) * (z - 45) * 0.5);
+      const terraceLevel = Math.min(6, Math.max(1, Math.floor(dist / 8)));
+      const topY = terraceLevel * 2;
+      const isBund = (Math.floor(dist) % 8 === 0);
+      for (let y = 0; y <= topY; y++) {
+        setVox(x, y, z, y === topY ? (isBund ? PAL.grassMeadow : (terraceLevel % 2 === 0 ? PAL.cropGold : PAL.cropGreen)) : PAL.earth, MAT_SOLID, 8);
+      }
+    }
+  }
+
+  // 4. Rustic Thatched Tea & Watermill Cottage beside the East Stream (x = 34..45, z = 58..68)
+  fillBox(34, 1, 58, 44, 6, 66, PAL.whiteWall, MAT_SOLID, 6);
+  setVox(34, 3, 62, PAL.windowGlow, MAT_GLOW, 3);
+  setVox(39, 3, 58, PAL.windowGlow, MAT_GLOW, 3);
+  // Warm golden thatched roof
+  for (let z = 56; z <= 68; z++) {
+    for (let x = 32; x <= 46; x++) {
+      const h = 7 + Math.max(0, 4 - Math.round(Math.abs(z - 62) * 0.65));
+      setVox(x, h, z, PAL.straw, MAT_SOLID, 10);
+      setVox(x, h - 1, z, PAL.warmWood, MAT_SOLID, 6);
+    }
+  }
+
+  // 5. Towering Shan-Shui Karst Peaks & Cascading Waterfall (远山奇峰与高山飞瀑)
+  buildKarstPeak(56, 106, 26, 20, 62, true);   // East main waterfall peak!
+  buildKarstPeak(92, 108, 28, 22, 54, false);  // Far East peak
+  buildKarstPeak(-54, 108, 27, 20, 58, false); // West sentinel peak
+  buildKarstPeak(-94, 104, 28, 24, 50, false); // Far West peak
+  buildKarstPeak(-108, 65, 18, 20, 34, false); // West flank crag
+
+  // Waterfall Plunge Pool & Cascading White-Water Curtain (x = 53..59, z = 92..100)
+  for (let y = 0; y <= 40; y++) {
+    const zFall = 97 + Math.floor(y / 14);
+    for (let x = 54; x <= 57; x++) {
+      const isFoam = ((y + x) % 3 === 0) || y <= 3;
+      setVox(x, y, zFall, isFoam ? PAL.waterFoam : PAL.waterShallow, MAT_WATER, 6);
+    }
+  }
+  fillEllipsoid(55, -1, 95, 6, 2, 5, PAL.waterShallow, MAT_WATER, 5, 1.0);
+  fillEllipsoid(55, 0, 96, 3.5, 1.2, 2.5, PAL.waterFoam, MAT_SOLID, 6, 0.7);
+
+  // Cliffside Welcome Pines (迎客松) jutting from the Karst Mountains
+  buildCliffPine(43, 24, 96, -1);
+  buildCliffPine(66, 30, 98, 1);
+  buildCliffPine(-42, 26, 98, 1);
+  buildCliffPine(-64, 32, 100, -1);
+
+  // 6. Weeping Willows along Moat Banks, Peach Blossom Woods & Emerald Bamboo Grove
+  const willowSpots = [
+    [-82, 44], [-58, 44], [-22, 44], [22, 44], [40, 44], [76, 44],
+    [-40, 17], [38, 17], [-72, 17], [70, 17]
+  ];
+  for (const [wx, wz] of willowSpots) buildWeepingWillow(wx, wz);
+
+  const peachSpots = [
+    [-22, 56], [-18, 70], [-28, 76], [-48, 56], [-52, 70],
+    [-42, 80], [-66, 58], [-74, 74], [-20, 84], [18, 54], [24, 72]
+  ];
+  for (const [px, pz] of peachSpots) buildPeachBlossomTree(px, pz);
+
+  // Emerald Bamboo Grove (翠竹林) near East Stream & Cottage (x = 24..34, z = 72..88)
+  for (let i = 0; i < 28; i++) {
+    const bx = Math.round(23 + hash2(i, 11) * 18);
+    const bz = Math.round(70 + hash2(i, 29) * 18);
+    const by = Math.max(0, getVoxTopSolid(bx, bz));
+    const bh = 9 + (i % 6);
+    for (let y = by + 1; y <= by + bh; y++) {
+      setVox(bx, y, bz, y % 3 === 0 ? 0x5c8038 : PAL.bamboo, MAT_SOLID, 4);
+      if (y > by + bh - 4 && (y + i) % 2 === 0) {
+        setVox(bx + 1, y, bz, PAL.willowLeaf, MAT_SOLID, 8);
+        setVox(bx, y, bz + 1, PAL.willowLeaf, MAT_SOLID, 8);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 8. VOXEL AMBIENT OCCLUSION MESHER (Chunked Face-Culled BufferGeometries)
+// ============================================================================
+function srgbToLinear(c) {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+// Six face definitions with verified CCW right-handed winding & 4-corner Voxel AO sampling
+const FACES = [
+  // +Y (Top): (1,0,0) x (1,0,-1) = (0, +1, 0)
+  { dir: [0, 1, 0],  shade: 1.00, corners: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]], s1: [[-1,1,0],[1,1,0],[1,1,0],[-1,1,0]], s2: [[0,1,1],[0,1,1],[0,1,-1],[0,1,-1]], sc: [[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]] },
+  // -Y (Bottom): (1,0,0) x (1,0,1) = (0, -1, 0)
+  { dir: [0, -1, 0], shade: 0.70, corners: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s1: [[-1,-1,0],[1,-1,0],[1,-1,0],[-1,-1,0]], s2: [[0,-1,-1],[0,-1,-1],[0,-1,1],[0,-1,1]], sc: [[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]] },
+  // +Z (South / Outer Scenic Side): (1,0,0) x (1,1,0) = (0, 0, +1)
+  { dir: [0, 0, 1],  shade: 0.96, corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s1: [[-1,0,1],[1,0,1],[1,0,1],[-1,0,1]], s2: [[0,-1,1],[0,-1,1],[0,1,1],[0,1,1]], sc: [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]] },
+  // -Z (North / Inner City Side): (-1,0,0) x (-1,1,0) = (0, 0, -1)
+  { dir: [0, 0, -1], shade: 0.86, corners: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], s1: [[1,0,-1],[-1,0,-1],[-1,0,-1],[1,0,-1]], s2: [[0,-1,-1],[0,-1,-1],[0,1,-1],[0,1,-1]], sc: [[1,-1,-1],[-1,-1,-1],[-1,1,-1],[1,1,-1]] },
+  // +X (East): (0,0,-1) x (0,1,-1) = (+1, 0, 0)
+  { dir: [1, 0, 0],  shade: 0.92, corners: [[1,0,1],[1,0,0],[1,1,0],[1,1,1]], s1: [[1,0,1],[1,0,-1],[1,0,-1],[1,0,1]], s2: [[1,-1,0],[1,-1,0],[1,1,0],[1,1,0]], sc: [[1,-1,1],[1,-1,-1],[1,1,-1],[1,1,1]] },
+  // -X (West): (0,0,1) x (0,1,1) = (-1, 0, 0)
+  { dir: [-1, 0, 0], shade: 0.89, corners: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s1: [[-1,0,-1],[-1,0,1],[-1,0,1],[-1,0,-1]], s2: [[-1,-1,0],[-1,-1,0],[-1,1,0],[-1,1,0]], sc: [[-1,-1,-1],[-1,-1,1],[-1,1,1],[-1,1,-1]] }
+];
+
+const AO_CURVE = [0.24, 0.51, 0.77, 1.0];
+
+function buildWorldMeshes(scene) {
+  const buckets = {
+    [MAT_SOLID]:  { pos: [], norm: [], col: [], idx: [], vCount: 0 },
+    [MAT_GLAZED]: { pos: [], norm: [], col: [], idx: [], vCount: 0 },
+    [MAT_GLOW]:   { pos: [], norm: [], col: [], idx: [], vCount: 0 },
+    [MAT_WATER]:  { pos: [], norm: [], col: [], idx: [], vCount: 0 }
+  };
+
+  let totalVoxels = 0;
+  let totalQuads = 0;
+
+  for (let cy = 0; cy < CY; cy++) {
+    for (let cz = 0; cz < CZ; cz++) {
+      for (let cx = 0; cx < CX; cx++) {
+        if (!chunkDirty[cx + cz * CX + cy * CX * CZ]) continue;
+
+        const x0 = X_MIN + (cx << 4), x1 = Math.min(X_MAX, x0 + 15);
+        const y0 = Y_MIN + (cy << 4), y1 = Math.min(Y_MAX, y0 + 15);
+        const z0 = Z_MIN + (cz << 4), z1 = Math.min(Z_MAX, z0 + 15);
+
+        for (let y = y0; y <= y1; y++) {
+          for (let z = z0; z <= z1; z++) {
+            for (let x = x0; x <= x1; x++) {
+              const val = voxGrid[vIdx(x, y, z)];
+              if (val === 0) continue;
+              totalVoxels++;
+
+              const mat = val >>> 24;
+              const rgb = val & 0xffffff;
+              const lr = srgbToLinear(((rgb >> 16) & 255) / 255);
+              const lg = srgbToLinear(((rgb >> 8) & 255) / 255);
+              const lb = srgbToLinear((rgb & 255) / 255);
+              const bkt = buckets[mat];
+
+              for (let f = 0; f < 6; f++) {
+                if (f === 1 && y <= 0) continue; // Skip invisible subterranean undersides
+                const face = FACES[f];
+                const nx = x + face.dir[0], ny = y + face.dir[1], nz = z + face.dir[2];
+                const nVal = getVox(nx, ny, nz);
+                const nMat = nVal >>> 24;
+
+                // Cull hidden interior faces
+                if (mat === MAT_WATER) {
+                  if (nMat === MAT_WATER || (nMat !== 0 && f !== 0)) continue;
+                } else {
+                  if (nMat !== 0 && nMat !== MAT_WATER) continue;
+                }
+
+                totalQuads++;
+                const baseV = bkt.vCount;
+                const aos = [3, 3, 3, 3];
+
+                for (let c = 0; c < 4; c++) {
+                  const cp = face.corners[c];
+                  const vyOff = (mat === MAT_WATER && cp[1] === 1) ? -0.15 : 0;
+                  bkt.pos.push(x + cp[0] - 0.5, y + cp[1] - 0.5 + vyOff, z + cp[2] - 0.5);
+                  bkt.norm.push(face.dir[0], face.dir[1], face.dir[2]);
+
+                  if (mat === MAT_GLOW) {
+                    bkt.col.push(lr, lg, lb);
+                  } else if (mat === MAT_WATER) {
+                    bkt.col.push(lr * face.shade, lg * face.shade, lb * face.shade);
+                  } else {
+                    const o1 = isOpaque(x + face.s1[c][0], y + face.s1[c][1], z + face.s1[c][2]) ? 1 : 0;
+                    const o2 = isOpaque(x + face.s2[c][0], y + face.s2[c][1], z + face.s2[c][2]) ? 1 : 0;
+                    const oc = isOpaque(x + face.sc[c][0], y + face.sc[c][1], z + face.sc[c][2]) ? 1 : 0;
+                    const aoLevel = (o1 && o2) ? 0 : (3 - (o1 + o2 + oc));
+                    aos[c] = aoLevel;
+                    const ao = AO_CURVE[aoLevel];
+                    const occ = 1 - ao;
+                    // Subtle cool-sky ambient tint in occluded crevices for painterly depth
+                    const mr = face.shade * (ao - occ * 0.04);
+                    const mg = face.shade * ao;
+                    const mb = face.shade * (ao + occ * 0.06);
+                    bkt.col.push(Math.max(0, lr * mr), Math.max(0, lg * mg), Math.max(0, lb * mb));
+                  }
+                }
+
+                // Flip quad triangulation according to AO to eliminate interpolation artifacts
+                if (aos[0] + aos[2] < aos[1] + aos[3]) {
+                  bkt.idx.push(baseV + 1, baseV + 2, baseV + 3, baseV + 1, baseV + 3, baseV + 0);
+                } else {
+                  bkt.idx.push(baseV + 0, baseV + 1, baseV + 2, baseV + 0, baseV + 2, baseV + 3);
+                }
+                bkt.vCount += 4;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const matSolid = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.82,
+    metalness: 0.04,
+    envMapIntensity: 0.75
+  });
+
+  const matGlazed = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.24,
+    metalness: 0.30,
+    envMapIntensity: 1.35
+  });
+
+  // HDR Self-luminous material for lanterns, warm windows, and braziers (triggers UnrealBloomPass!)
+  const matGlow = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    color: new THREE.Color(1.45, 1.45, 1.45)
+  });
+
+  const waterUniforms = { uTime: { value: 0 } };
+  const matWater = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.84,
+    roughness: 0.07,
+    metalness: 0.28,
+    envMapIntensity: 1.75
+  });
+  matWater.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = waterUniforms.uTime;
+    shader.vertexShader = `
+      uniform float uTime;
+      varying vec3 vWorldPosW;
+      varying float vIsWaterTop;
+      varying vec3 vViewWaveX;
+      varying vec3 vViewWaveZ;
+    ` + shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `
+      #include <begin_vertex>
+      vec4 wpTmp = modelMatrix * vec4(transformed, 1.0);
+      vWorldPosW = wpTmp.xyz;
+      vIsWaterTop = normal.y;
+      vViewWaveX = normalize(normalMatrix * vec3(1.0, 0.0, 0.0));
+      vViewWaveZ = normalize(normalMatrix * vec3(0.0, 0.0, 1.0));
+      if (normal.y > 0.5) {
+        transformed.y += sin(wpTmp.x * 0.45 + uTime * 2.2) * 0.055 + cos(wpTmp.z * 0.55 - uTime * 1.8) * 0.045;
+      }
+      `
+    );
+    shader.fragmentShader = `
+      uniform float uTime;
+      varying vec3 vWorldPosW;
+      varying float vIsWaterTop;
+      varying vec3 vViewWaveX;
+      varying vec3 vViewWaveZ;
+    ` + shader.fragmentShader.replace(
+      '#include <normal_fragment_maps>',
+      `
+      #include <normal_fragment_maps>
+      if (vIsWaterTop > 0.5) {
+        float wx = cos(vWorldPosW.x * 0.85 + uTime * 2.4) * 0.08 + sin((vWorldPosW.x + vWorldPosW.z) * 0.5 - uTime * 1.9) * 0.05;
+        float wz = sin(vWorldPosW.z * 0.90 - uTime * 2.1) * 0.08 + cos((vWorldPosW.x - vWorldPosW.z) * 0.55 + uTime * 1.6) * 0.05;
+        normal = normalize(normal + vViewWaveX * wx + vViewWaveZ * wz);
+      }
+      `
+    );
+  };
+
+  const materials = {
+    [MAT_SOLID]: matSolid,
+    [MAT_GLAZED]: matGlazed,
+    [MAT_GLOW]: matGlow,
+    [MAT_WATER]: matWater
+  };
+
+  for (const mKey of [MAT_SOLID, MAT_GLAZED, MAT_GLOW, MAT_WATER]) {
+    const b = buckets[mKey];
+    if (b.vCount === 0) continue;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(b.norm, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
+    geo.setIndex(b.idx);
+    geo.computeBoundingSphere();
+
+    const mesh = new THREE.Mesh(geo, materials[mKey]);
+    if (mKey === MAT_SOLID || mKey === MAT_GLAZED) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    } else if (mKey === MAT_WATER) {
+      mesh.receiveShadow = true;
+    }
+    scene.add(mesh);
+  }
+
+  return { totalVoxels, totalQuads, matGlow, matWater, waterUniforms };
+}
+
+// ============================================================================
+// 9. MICRO-VOXEL RIG BUILDER FOR CHARACTERS, SOLDIERS, CARTS, BOATS & BIRDS
+// ============================================================================
+const sharedMatChar = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  roughness: 0.72,
+  metalness: 0.08,
+  envMapIntensity: 0.85
+});
+
+function createMicroVoxelGeometry(voxels, scale = 0.24) {
+  const map = new Map();
+  for (let i = 0; i < voxels.length; i++) {
+    const v = voxels[i];
+    map.set(`${v[0]},${v[1]},${v[2]}`, v[3]);
+  }
+  const pos = [], norm = [], col = [], idx = [];
+  let vCount = 0;
+
+  for (const [key, hex] of map.entries()) {
+    const parts = key.split(',');
+    const x = +parts[0], y = +parts[1], z = +parts[2];
+    const lr = srgbToLinear(((hex >> 16) & 255) / 255);
+    const lg = srgbToLinear(((hex >> 8) & 255) / 255);
+    const lb = srgbToLinear((hex & 255) / 255);
+
+    for (let f = 0; f < 6; f++) {
+      const face = FACES[f];
+      const nk = `${x + face.dir[0]},${y + face.dir[1]},${z + face.dir[2]}`;
+      if (map.has(nk)) continue;
+
+      const baseV = vCount;
+      const sh = face.shade;
+      const cr = lr * sh;
+      const cg = lg * sh;
+      const cb = lb * sh;
+
+      for (let c = 0; c < 4; c++) {
+        const cp = face.corners[c];
+        pos.push((x + cp[0] - 0.5) * scale, (y + cp[1]) * scale, (z + cp[2] - 0.5) * scale);
+        norm.push(face.dir[0], face.dir[1], face.dir[2]);
+        col.push(cr, cg, cb);
+      }
+      idx.push(baseV, baseV + 1, baseV + 2, baseV, baseV + 2, baseV + 3);
+      vCount += 4;
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  return geo;
+}
+
+function addBoxVoxels(arr, x1, y1, z1, x2, y2, z2, hex) {
+  for (let y = y1; y <= y2; y++) {
+    for (let z = z1; z <= z2; z++) {
+      for (let x = x1; x <= x2; x++) {
+        arr.push([x, y, z, hex]);
+      }
+    }
+  }
+}
+
+// Geometry cache so 80+ articulated characters share crisp limb/body BufferGeometries
+const geoCache = new Map();
+function getCachedMicroGeo(key, buildFn, scale = 0.23) {
+  if (!geoCache.has(key)) {
+    const vox = [];
+    buildFn(vox);
+    geoCache.set(key, createMicroVoxelGeometry(vox, scale));
+  }
+  return geoCache.get(key);
+}
+
+// Articulated Humanoid Rig Factory:
+// Supports: 'soldier', 'guard', 'general', 'scholar', 'merchant', 'lady', 'porter', 'monk', 'swordsman', 'waiter', 'child'
+function createCharacterRig(type, variant = 0) {
+  const root = new THREE.Group();
+  const s = 0.23; // 1 micro-voxel = 0.23 world units (~15 micro-voxels = 3.5 world voxels tall)
+
+  const skin = 0xf0c49b;
+  const hair = 0x231d1a;
+  const boot = 0x2c2827;
+
+  // Outfit palettes by archetype
+  const outfits = {
+    soldier:   { tunic: 0x9e2820, trim: 0x3b424c, belt: 0xd4a63f, pants: 0x2f353d, hat: 'helmet' },
+    guard:     { tunic: 0xb8291e, trim: 0xd4a63f, belt: 0xf2c957, pants: 0x2b2f36, hat: 'helmetGold' },
+    general:   { tunic: 0xd49b35, trim: 0xb8241a, belt: 0xffe07d, pants: 0x7d1c15, hat: 'generalCrown' },
+    scholar:   { tunic: [0x4c7c96, 0x5c8a78, 0x6b6896][variant % 3], trim: 0xe6e2d8, belt: 0x34495e, pants: 0xdad6cc, hat: 'scholarCap' },
+    merchant:  { tunic: [0x8c5332, 0x6e476b, 0x3f6148][variant % 3], trim: 0xd6b065, belt: 0xb88935, pants: 0x453b34, hat: variant % 2 === 0 ? 'strawHat' : 'roundCap' },
+    lady:      { tunic: [0xe68393, 0x7bc2b0, 0xf0ad75, 0xc77eb5][variant % 4], trim: 0xfff0f3, belt: 0xd9485f, pants: 0xf5dce0, hat: 'hairpins' },
+    porter:    { tunic: 0x6e6254, trim: 0x8f7e6a, belt: 0x473c32, pants: 0x4a4640, hat: 'strawHat' },
+    monk:      { tunic: 0xd98a2b, trim: 0x8f4919, belt: 0x8f4919, pants: 0xc27b27, hat: 'bald' },
+    swordsman: { tunic: 0x28384d, trim: 0x1a2433, belt: 0x9eaab8, pants: 0x1e2938, hat: 'strawHatDark' },
+    waiter:    { tunic: 0x4c6885, trim: 0xedeae4, belt: 0xedeae4, pants: 0x384654, hat: 'clothCap' },
+    child:     { tunic: 0xe04836, trim: 0xf2c957, belt: 0x3b7d49, pants: 0xf2dca2, hat: 'twinBuns' }
+  };
+  const cfg = outfits[type] || outfits.merchant;
+  const scFactor = type === 'child' ? 0.72 : (type === 'general' ? 1.08 : 1.0);
+  root.scale.setScalar(scFactor);
+
+  // Legs (pivot at hip y = 5*s)
+  const legGeo = getCachedMicroGeo(`leg_${cfg.pants}`, (v) => {
+    addBoxVoxels(v, 0, -5, 0, 1, -2, 1, cfg.pants);
+    addBoxVoxels(v, 0, -6, 0, 1, -5, 2, boot);
+  }, s);
+
+  const leftLeg = new THREE.Mesh(legGeo, sharedMatChar);
+  leftLeg.position.set(-1.1 * s, 6 * s, 0);
+  leftLeg.castShadow = true;
+
+  const rightLeg = new THREE.Mesh(legGeo, sharedMatChar);
+  rightLeg.position.set(0.4 * s, 6 * s, 0);
+  rightLeg.castShadow = true;
+  root.add(leftLeg, rightLeg);
+
+  // Torso + Head
+  const bodyGeo = getCachedMicroGeo(`body_${type}_${variant}`, (v) => {
+    // Robe / Lamellar Armor Torso (y = 5..10)
+    addBoxVoxels(v, -2, 5, -1, 2, 10, 1, cfg.tunic);
+    if (type === 'lady' || type === 'scholar' || type === 'monk') {
+      // Longer flowing lower robe hem
+      addBoxVoxels(v, -2, 3, -1, 2, 5, 1, cfg.tunic);
+      addBoxVoxels(v, -2, 3, 2, 2, 3, 2, cfg.trim);
+    }
+    // Collar / Chest Plate & Belt
+    addBoxVoxels(v, -2, 7, -1, 2, 7, 1, cfg.belt);
+    addBoxVoxels(v, -1, 9, 1, 1, 10, 2, cfg.trim);
+    if (type === 'soldier' || type === 'guard' || type === 'general') {
+      // Lamellar shoulder pauldrons & mirror chest plate
+      addBoxVoxels(v, -3, 9, -1, -3, 10, 1, cfg.trim);
+      addBoxVoxels(v, 3, 9, -1, 3, 10, 1, cfg.trim);
+      v.push([0, 9, 2, PAL.goldBright]);
+    }
+    if (type === 'general') {
+      // Flowing crimson general cape on back
+      addBoxVoxels(v, -2, 3, -2, 2, 10, -2, PAL.vermilionBright);
+    }
+    if (type === 'waiter') {
+      // White serving towel draped over left shoulder!
+      addBoxVoxels(v, -2, 8, 2, -1, 11, 2, 0xf5f3ed);
+    }
+    if (type === 'scholar' && variant % 2 === 0) {
+      // Bamboo book-frame backpack (书笈)
+      addBoxVoxels(v, -2, 6, -3, 2, 12, -2, PAL.lightWood);
+      addBoxVoxels(v, -1, 8, -3, 1, 10, -3, 0xeae6dc);
+    }
+    if (type === 'swordsman') {
+      // Diagonal sword scabbard on back
+      v.push([-1, 6, -2, 0x1a1d24], [0, 8, -2, 0x1a1d24], [1, 10, -2, 0x1a1d24], [2, 12, -2, PAL.gold]);
+    }
+
+    // Head (y = 11..14)
+    addBoxVoxels(v, -1, 11, -1, 2, 14, 2, skin);
+    // Eyes
+    v.push([0, 12, 2, hair], [2, 12, 2, hair]);
+
+    // Headgear / Hairstyles
+    if (cfg.hat === 'helmet' || cfg.hat === 'helmetGold' || cfg.hat === 'generalCrown') {
+      const hCol = cfg.hat === 'helmet' ? 0x3c434d : PAL.gold;
+      addBoxVoxels(v, -2, 14, -2, 3, 15, 2, hCol);
+      addBoxVoxels(v, -2, 12, -2, 3, 14, -1, hCol); // Neck guard
+      addBoxVoxels(v, 0, 16, 0, 1, 18, 0, PAL.lanternRed); // Red tassel plume (红缨)!
+    } else if (cfg.hat === 'scholarCap') {
+      addBoxVoxels(v, -1, 14, -1, 2, 16, 2, 0x242830);
+      addBoxVoxels(v, -3, 15, -1, 4, 15, 0, 0x242830); // Winged Tang/Song Futou tabs
+    } else if (cfg.hat === 'strawHat' || cfg.hat === 'strawHatDark') {
+      const sc = cfg.hat === 'strawHatDark' ? 0x3b3832 : PAL.straw;
+      addBoxVoxels(v, -4, 14, -4, 5, 14, 5, sc);
+      addBoxVoxels(v, -2, 15, -2, 3, 16, 3, sc);
+    } else if (cfg.hat === 'hairpins') {
+      addBoxVoxels(v, -1, 13, -2, 2, 15, 1, hair);
+      addBoxVoxels(v, 0, 16, 0, 1, 17, 1, hair);
+      v.push([-1, 16, 1, PAL.goldBright], [2, 16, 1, PAL.peachPink]);
+    } else if (cfg.hat === 'twinBuns') {
+      addBoxVoxels(v, -1, 14, -1, 2, 15, 1, hair);
+      v.push([-2, 15, 0, hair], [3, 15, 0, hair], [-2, 16, 0, PAL.lanternRed], [3, 16, 0, PAL.lanternRed]);
+    } else if (cfg.hat !== 'bald') {
+      addBoxVoxels(v, -1, 14, -1, 2, 15, 2, hair);
+    }
+  }, s);
+
+  const body = new THREE.Mesh(bodyGeo, sharedMatChar);
+  body.castShadow = true;
+  root.add(body);
+
+  // Articulated Arms (pivot at shoulder y = 10*s)
+  const armGeo = getCachedMicroGeo(`arm_${cfg.tunic}`, (v) => {
+    addBoxVoxels(v, 0, -4, 0, 1, 0, 1, cfg.tunic);
+    addBoxVoxels(v, 0, -5, 0, 1, -4, 1, skin);
+  }, s);
+
+  const leftArm = new THREE.Group();
+  leftArm.position.set(-3.2 * s, 10 * s, 0);
+  const leftArmMesh = new THREE.Mesh(armGeo, sharedMatChar);
+  leftArmMesh.castShadow = true;
+  leftArm.add(leftArmMesh);
+
+  const rightArm = new THREE.Group();
+  rightArm.position.set(2.5 * s, 10 * s, 0);
+  const rightArmMesh = new THREE.Mesh(armGeo, sharedMatChar);
+  rightArmMesh.castShadow = true;
+  rightArm.add(rightArmMesh);
+
+  root.add(leftArm, rightArm);
+
+  // Optional Role Props (Spear/Halberd, Bow, Parasol, Carrying Pole with Baskets, Candied Hawthorn)
+  let baskets = null;
+  if (type === 'guard' || (type === 'soldier' && variant % 3 !== 2)) {
+    // Tall gleaming Halberd / Red-tasseled Spear
+    const isHalberd = type === 'guard';
+    const wepGeo = getCachedMicroGeo(isHalberd ? 'wep_halberd' : 'wep_spear', (v) => {
+      addBoxVoxels(v, 0, -6, 0, 0, 18, 0, PAL.warmWood);
+      v.push([0, 16, 1, PAL.lanternRed], [0, 17, 1, PAL.lanternRed]); // Red tassel
+      addBoxVoxels(v, 0, 18, 0, 0, 22, 0, 0xdce3eb); // Steel point
+      if (isHalberd) {
+        addBoxVoxels(v, 0, 17, 1, 0, 20, 2, 0xdce3eb); // Crescent halberd blade!
+      }
+    }, s);
+    const wep = new THREE.Mesh(wepGeo, sharedMatChar);
+    wep.position.set(0.4 * s, -3 * s, 1 * s);
+    rightArm.add(wep);
+  } else if (type === 'soldier' && variant % 3 === 2) {
+    // Recurve Bow in left hand
+    const bowGeo = getCachedMicroGeo('wep_bow', (v) => {
+      v.push([0, -3, 3, PAL.warmWood], [0, -2, 4, PAL.gold], [0, -1, 4, PAL.warmWood], [0, 0, 4, PAL.warmWood], [0, 1, 4, PAL.gold], [0, 2, 3, PAL.warmWood]);
+    }, s);
+    const bow = new THREE.Mesh(bowGeo, sharedMatChar);
+    leftArm.add(bow);
+  } else if (type === 'porter') {
+    // Bamboo Shoulder Pole (扁担) with two Woven Baskets (箩筐) that bob!
+    const poleGeo = getCachedMicroGeo('prop_pole', (v) => {
+      addBoxVoxels(v, -12, 0, 0, 12, 0, 0, PAL.bamboo);
+    }, s);
+    const pole = new THREE.Mesh(poleGeo, sharedMatChar);
+    pole.position.set(0, 10.6 * s, 0.5 * s);
+    root.add(pole);
+
+    const bskGeo = getCachedMicroGeo('prop_basket', (v) => {
+      v.push([0, -1, 0, PAL.straw], [0, -2, 0, PAL.straw], [0, -3, 0, PAL.straw]);
+      addBoxVoxels(v, -2, -6, -2, 2, -4, 2, PAL.lightWood);
+      addBoxVoxels(v, -1, -3, -1, 1, -3, 1, 0x76a346); // Fresh greens/goods inside!
+    }, s);
+    const b1 = new THREE.Mesh(bskGeo, sharedMatChar);
+    b1.position.set(-10.5 * s, 10.5 * s, 0.5 * s);
+    const b2 = new THREE.Mesh(bskGeo, sharedMatChar);
+    b2.position.set(10.5 * s, 10.5 * s, 0.5 * s);
+    b1.castShadow = true; b2.castShadow = true;
+    root.add(b1, b2);
+    baskets = [b1, b2];
+  } else if (type === 'lady' && variant % 2 === 0) {
+    // Oil-paper Silk Parasol (油纸伞)!
+    const umbGeo = getCachedMicroGeo('prop_parasol', (v) => {
+      addBoxVoxels(v, 0, -2, 0, 0, 9, 0, PAL.bamboo);
+      addBoxVoxels(v, -5, 9, -5, 5, 9, 5, 0xf7d4dc);
+      addBoxVoxels(v, -3, 10, -3, 3, 10, 3, 0xe88ca2);
+    }, s);
+    const umb = new THREE.Mesh(umbGeo, sharedMatChar);
+    umb.position.set(0.5 * s, -2 * s, 1.2 * s);
+    rightArm.rotation.x = -0.55;
+    rightArm.add(umb);
+  } else if (type === 'child') {
+    // Candied Hawthorn Skewer (冰糖葫芦)
+    const tangGeo = getCachedMicroGeo('prop_tanghulu', (v) => {
+      addBoxVoxels(v, 0, 0, 1, 0, 5, 1, PAL.straw);
+      v.push([0, 3, 1, PAL.lanternRed], [0, 4, 1, PAL.lanternRed], [0, 5, 1, PAL.lanternRed]);
+    }, s);
+    const tang = new THREE.Mesh(tangGeo, sharedMatChar);
+    rightArm.rotation.x = -0.7;
+    rightArm.add(tang);
+  }
+
+  return { root, leftLeg, rightLeg, leftArm, rightArm, baskets, type };
+}
+
+// Horse-Drawn Wooden Cargo Cart / Covered Silk Carriage Rig
+function createHorseCartRig(isCarriage = false, horseCoat = 0x7c4728) {
+  const group = new THREE.Group();
+  const s = 0.24;
+
+  // 1. Voxel Horse (ahead at z = +2.6)
+  const horseBodyGeo = getCachedMicroGeo(`horse_${horseCoat}`, (v) => {
+    // Barrel torso
+    addBoxVoxels(v, -2, 5, -4, 2, 9, 4, horseCoat);
+    // Saddle / Harness
+    addBoxVoxels(v, -2, 9, -1, 2, 10, 1, PAL.vermilion);
+    // Neck & Noble Head
+    addBoxVoxels(v, -1, 8, 3, 1, 13, 6, horseCoat);
+    addBoxVoxels(v, -1, 11, 6, 1, 13, 9, horseCoat);
+    // Mane & Flowing Tail
+    addBoxVoxels(v, 0, 10, 2, 0, 14, 5, 0x1e1815);
+    addBoxVoxels(v, 0, 4, -6, 0, 8, -5, 0x1e1815);
+    // Ears
+    v.push([-1, 14, 5, horseCoat], [1, 14, 5, horseCoat]);
+  }, s);
+  const horseBody = new THREE.Mesh(horseBodyGeo, sharedMatChar);
+  horseBody.position.z = 2.7;
+  horseBody.castShadow = true;
+  group.add(horseBody);
+
+  const hLegGeo = getCachedMicroGeo(`hleg_${horseCoat}`, (v) => {
+    addBoxVoxels(v, 0, -5, 0, 1, 0, 1, horseCoat);
+    addBoxVoxels(v, 0, -6, 0, 1, -5, 1, 0x1e1a18);
+  }, s);
+  const horseLegs = [];
+  for (const [lx, lz] of [[-1.8, 3.5], [1.0, 3.5], [-1.8, 1.9], [1.0, 1.9]]) {
+    const hl = new THREE.Mesh(hLegGeo, sharedMatChar);
+    hl.position.set(lx * s, 6 * s, lz);
+    hl.castShadow = true;
+    group.add(hl);
+    horseLegs.push(hl);
+  }
+
+  // 2. Wooden Cart Bed, Harness Shafts & Cargo / Silk Canopy (centered at z = -1.2)
+  const cartGeo = getCachedMicroGeo(isCarriage ? 'cart_carriage' : 'cart_cargo', (v) => {
+    // Wooden platform & side rails
+    addBoxVoxels(v, -6, 4, -8, 6, 5, 4, PAL.warmWood);
+    addBoxVoxels(v, -6, 6, -8, -6, 8, 4, PAL.darkWood);
+    addBoxVoxels(v, 6, 6, -8, 6, 8, 4, PAL.darkWood);
+    // Two wooden shafts reaching forward to horse
+    addBoxVoxels(v, -3, 6, 4, -3, 6, 16, PAL.warmWood);
+    addBoxVoxels(v, 3, 6, 4, 3, 6, 16, PAL.warmWood);
+
+    if (isCarriage) {
+      // Ornate Covered Passenger Carriage (青篷马车)
+      addBoxVoxels(v, -5, 6, -7, 5, 14, 2, 0x355c7d);
+      addBoxVoxels(v, -6, 14, -8, 6, 15, 3, PAL.roofCharcoal);
+      addBoxVoxels(v, -4, 15, -7, 4, 16, 2, PAL.gold);
+      // Warm curtained side windows
+      addBoxVoxels(v, -5, 9, -4, -5, 12, -1, PAL.lanternRed);
+      addBoxVoxels(v, 5, 9, -4, 5, 12, -1, PAL.lanternRed);
+    } else {
+      // Loaded Cargo: Grain sacks, terracotta wine jars & wooden crates
+      addBoxVoxels(v, -5, 6, -7, 0, 10, -2, 0xc9ab77);
+      addBoxVoxels(v, 1, 6, -6, 5, 9, 1, 0x8f4c34);
+      addBoxVoxels(v, -4, 6, -1, 0, 8, 3, PAL.lightWood);
+    }
+  }, s);
+  const cartMesh = new THREE.Mesh(cartGeo, sharedMatChar);
+  cartMesh.position.z = -1.0;
+  cartMesh.castShadow = true;
+  group.add(cartMesh);
+
+  // Driver seated on front of cart
+  const driver = createCharacterRig('merchant', isCarriage ? 1 : 0);
+  driver.root.position.set(0, 1.05, -0.2);
+  group.add(driver.root);
+
+  // 2 Rotating Spoked Wooden Wheels (centered around 0,0,0 for smooth X-axis rotation)
+  const centeredWheelGeo = getCachedMicroGeo('cart_wheel_centered', (v) => {
+    for (let dy = -5; dy <= 5; dy++) {
+      for (let dz = -5; dz <= 5; dz++) {
+        const r = Math.sqrt(dy * dy + dz * dz);
+        if ((r >= 3.8 && r <= 5.1) || dy === 0 || dz === 0) {
+          v.push([0, dy, dz, r >= 3.8 ? PAL.darkWood : PAL.lightWood]);
+        }
+      }
+    }
+  }, s);
+
+  const leftWheel = new THREE.Mesh(centeredWheelGeo, sharedMatChar);
+  leftWheel.position.set(-7 * s, 5.2 * s, -1.5);
+  leftWheel.castShadow = true;
+  const rightWheel = new THREE.Mesh(centeredWheelGeo, sharedMatChar);
+  rightWheel.position.set(7 * s, 5.2 * s, -1.5);
+  rightWheel.castShadow = true;
+  group.add(leftWheel, rightWheel);
+
+  return { group, horseLegs, wheels: [leftWheel, rightWheel] };
+}
+
+// Hand-Pushed Wooden Wheelbarrow + Porter Rig (独轮推车)
+function createWheelbarrowRig() {
+  const group = new THREE.Group();
+  const s = 0.23;
+  const barrowGeo = getCachedMicroGeo('wheelbarrow', (v) => {
+    addBoxVoxels(v, -3, 3, -2, 3, 4, 5, PAL.warmWood);
+    addBoxVoxels(v, -3, 3, -7, -3, 4, -2, PAL.warmWood);
+    addBoxVoxels(v, 3, 3, -7, 3, 4, -2, PAL.warmWood);
+    addBoxVoxels(v, -2, 5, -1, 2, 8, 4, 0xc7a876); // Grain sacks
+    addBoxVoxels(v, 0, 1, 2, 0, 5, 6, PAL.darkWood); // Central wheelwell
+  }, s);
+  const barrow = new THREE.Mesh(barrowGeo, sharedMatChar);
+  barrow.position.z = 1.1;
+  barrow.castShadow = true;
+  group.add(barrow);
+
+  const pusher = createCharacterRig('porter', 1);
+  // Remove shoulder baskets from wheelbarrow pusher — just use character rig
+  if (pusher.baskets) pusher.baskets.forEach(b => b.visible = false);
+  pusher.leftArm.rotation.x = -0.65;
+  pusher.rightArm.rotation.x = -0.65;
+  pusher.root.position.z = -0.5;
+  group.add(pusher.root);
+
+  return { group, pusher };
+}
+
+// Wooden Moat Sampan Boat (乌篷小舟) with Boatman & Glowing Bow Lantern
+function createSampanBoat() {
+  const group = new THREE.Group();
+  const s = 0.28;
+  const hullGeo = getCachedMicroGeo('sampan_hull', (v) => {
+    for (let dz = -14; dz <= 14; dz++) {
+      const w = Math.max(1, Math.round((1 - (dz * dz) / 220) * 4));
+      const lift = Math.abs(dz) > 9 ? Math.round((Math.abs(dz) - 9) * 0.6) : 0;
+      addBoxVoxels(v, -w, lift, dz, w, lift + 1, dz, PAL.darkWood);
+      v.push([-w, lift + 2, dz, PAL.warmWood], [w, lift + 2, dz, PAL.warmWood]);
+    }
+    // Curved woven bamboo cabin awning (乌篷)
+    for (let dz = -5; dz <= 4; dz++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        const cy = 5 - Math.round((dx * dx) * 0.25);
+        v.push([dx, cy, dz, (dx + dz) % 2 === 0 ? PAL.straw : PAL.lightWood]);
+      }
+    }
+    // Bow lantern post
+    addBoxVoxels(v, 0, 3, 12, 0, 6, 12, PAL.bamboo);
+    v.push([0, 5, 13, PAL.lanternRed]);
+  }, s);
+  const hull = new THREE.Mesh(hullGeo, sharedMatChar);
+  hull.castShadow = true;
+  group.add(hull);
+
+  const boatman = createCharacterRig('merchant', 0);
+  boatman.root.position.set(0, 0.5, -2.2);
+  boatman.rightArm.rotation.x = -0.6;
+  group.add(boatman.root);
+
+  return { group, boatman };
+}
+
+// ============================================================================
+// 10. POPULATE LIVING SCENE: SOLDIERS, GUARDS, MERCHANTS, TRAFFIC & NATURE
+// ============================================================================
+const animatedActors = [];    // Static/stationed animated people (guards, soldiers, merchants)
+const patrollingSoldiers = []; // Marching wall patrols
+const roadTraffic = [];        // Continuous 2-way travelers, carts & wheelbarrows
+const moatBoats = [];
+const flutteringFlags = [];
+const flyingCranes = [];
+
+function populateLivingWorld(scene) {
+  // 1. TOWER SOLDIERS & IMPERIAL GENERAL ON THE CITY GATE & WALLS
+  // Imperial General overlooking the realm from the Gate Tower terrace
+  const general = createCharacterRig('general', 0);
+  general.root.position.set(0, 23, 9.6);
+  scene.add(general.root);
+  animatedActors.push({ rig: general, mode: 'idleProud', phase: 0 });
+
+  // Battlement Sentries (Spearmen & Archers) atop Gate Platform & Flanking Walls
+  const sentryPosts = [
+    [-18, 23, 9.8, 0], [-9, 23, 9.8, 0], [9, 23, 9.8, 0], [18, 23, 9.8, 0],
+    [-25, 23, -9.5, Math.PI], [25, 23, -9.5, Math.PI],
+    [-42, 20, 7.6, 0], [42, 20, 7.6, 0],
+    [-55, 21, 12.2, 0], [55, 21, 12.2, 0],
+    [-76, 20, 7.6, 0], [76, 20, 7.6, 0]
+  ];
+  sentryPosts.forEach(([sx, sy, sz, rotY], idx) => {
+    const sol = createCharacterRig('soldier', idx);
+    sol.root.position.set(sx, sy, sz);
+    sol.root.rotation.y = rotY;
+    scene.add(sol.root);
+    animatedActors.push({ rig: sol, mode: 'sentry', phase: idx * 0.9 });
+  });
+
+  // War Drummer Soldier beating the war drum at x = 25, y = 23, z = 3.0
+  const drummer = createCharacterRig('soldier', 1);
+  drummer.root.position.set(25, 23, 2.7);
+  drummer.root.rotation.y = 0;
+  scene.add(drummer.root);
+  animatedActors.push({ rig: drummer, mode: 'drummer', phase: 0 });
+
+  // Patrolling Wall Soldier Pairs marching along East Wall, West Wall & Gate Terrace
+  const patrolRoutes = [
+    { x1: -88, x2: -36, y: 20, z: -1.5, speed: 3.2, prog: 0.15, dir: 1 },
+    { x1: -88, x2: -36, y: 20, z: 0.2,  speed: 3.2, prog: 0.19, dir: 1 },
+    { x1: 36,  x2: 88,  y: 20, z: -1.5, speed: 3.0, prog: 0.65, dir: -1 },
+    { x1: 36,  x2: 88,  y: 20, z: 0.2,  speed: 3.0, prog: 0.69, dir: -1 },
+    { x1: -24, x2: 24,  y: 23, z: -9.0, speed: 2.6, prog: 0.4,  dir: 1 },
+    { x1: -24, x2: 24,  y: 23, z: 9.2,  speed: 2.6, prog: 0.8,  dir: -1 }
+  ];
+  patrolRoutes.forEach((p, idx) => {
+    const rig = createCharacterRig('soldier', idx);
+    scene.add(rig.root);
+    patrollingSoldiers.push({ ...p, rig });
+  });
+
+  // 2. ELITE HALBERD GUARDS & CHECKPOINT OFFICERS AT THE CITY GATE
+  const gateGuardPosts = [
+    // Outer Gate Archway Guards
+    [-8.2, 1, 13.4, 0], [8.2, 1, 13.4, 0],
+    [-9.0, 1, 17.2, 0], [9.0, 1, 17.2, 0],
+    // Inner Gate Archway Guards
+    [-8.2, 1, -13.4, Math.PI], [8.2, 1, -13.4, Math.PI],
+    // Tunnel Midpoint Guards standing before the open vermilion doors
+    [-5.0, 1, 10.5, Math.PI * 0.5], [5.0, 1, 10.5, -Math.PI * 0.5]
+  ];
+  gateGuardPosts.forEach(([gx, gy, gz, rotY], idx) => {
+    const grd = createCharacterRig('guard', idx);
+    grd.root.position.set(gx, gy, gz);
+    grd.root.rotation.y = rotY;
+    scene.add(grd.root);
+    animatedActors.push({ rig: grd, mode: 'guard', phase: idx * 1.1 });
+  });
+
+  // Checkpoint Inspection Officer & Scribe at Outer East Table + Citizens at Notice Board
+  const officer = createCharacterRig('general', 1);
+  officer.root.position.set(11.8, 1, 14.8);
+  officer.root.rotation.y = -Math.PI * 0.4;
+  scene.add(officer.root);
+  animatedActors.push({ rig: officer, mode: 'wave', phase: 0.5 });
+
+  const scribe = createCharacterRig('scholar', 0);
+  scribe.root.position.set(14.5, 1, 13.0);
+  scribe.root.rotation.y = 0;
+  scene.add(scribe.root);
+  animatedActors.push({ rig: scribe, mode: 'sentry', phase: 1.2 });
+
+  // Citizens reading the Imperial Notice Board (x = -15, z = 13.5)
+  for (const [nx, nz, ry, t] of [[-15.8, 13.3, 0, 'scholar'], [-14.0, 13.4, -0.2, 'merchant']]) {
+    const reader = createCharacterRig(t, 2);
+    reader.root.position.set(nx, 1, nz);
+    reader.root.rotation.y = ry;
+    scene.add(reader.root);
+    animatedActors.push({ rig: reader, mode: 'chat', phase: nx });
+  }
+
+  // 3. INNER CITY SHOPKEEPERS, WAITER, BLACKSMITH, CUSTOMERS & PAVILION SCHOLARS
+  const marketCast = [
+    // Tavern 醉仙楼 Waiter welcoming guests
+    { type: 'waiter', v: 0, x: 10.8, y: 1, z: -32, rot: -Math.PI * 0.5, mode: 'wave' },
+    // Tavern Upstairs Balcony Diners enjoying the view!
+    { type: 'scholar',  v: 1, x: 12.4, y: 10, z: -38.5, rot: -Math.PI * 0.4, mode: 'chat' },
+    { type: 'merchant', v: 2, x: 12.4, y: 10, z: -33.5, rot: -Math.PI * 0.6, mode: 'wave' },
+    { type: 'lady',     v: 1, x: 12.4, y: 10, z: -28.5, rot: -Math.PI * 0.5, mode: 'chat' },
+    // Steamed Bun Chef & Tea Customers
+    { type: 'waiter',   v: 1, x: 13.8, y: 1, z: -48.5, rot: -Math.PI * 0.6, mode: 'work' },
+    { type: 'scholar',  v: 2, x: 15.0, y: 1, z: -52.8, rot: Math.PI * 0.5,  mode: 'chat' },
+    { type: 'monk',     v: 0, x: 18.2, y: 1, z: -52.4, rot: -Math.PI * 0.5, mode: 'chat' },
+    // Blacksmith hammering at the glowing anvil!
+    { type: 'porter',   v: 2, x: 11.4, y: 1, z: -65.8, rot: 0, mode: 'hammer' },
+    // Silk Emporium Merchant & Noblewomen Shoppers
+    { type: 'merchant', v: 0, x: -12.8, y: 1, z: -33.0, rot: Math.PI * 0.5,  mode: 'wave' },
+    { type: 'lady',     v: 0, x: -10.5, y: 1, z: -35.0, rot: -Math.PI * 0.5, mode: 'chat' },
+    { type: 'lady',     v: 2, x: -10.4, y: 1, z: -31.5, rot: -Math.PI * 0.4, mode: 'chat' },
+    // Fruit Vendor & Candied Hawthorn Peddler + Mother & Child
+    { type: 'merchant', v: 1, x: -14.2, y: 1, z: -50.0, rot: Math.PI * 0.5,  mode: 'work' },
+    { type: 'merchant', v: 2, x: -10.8, y: 1, z: -44.8, rot: Math.PI * 0.3,  mode: 'wave' },
+    { type: 'lady',     v: 3, x: -8.8,  y: 1, z: -45.2, rot: -Math.PI * 0.7, mode: 'chat' },
+    { type: 'child',    v: 0, x: -8.6,  y: 1, z: -46.3, rot: -Math.PI * 0.5, mode: 'wave' },
+    // Two Scholars admiring mountains from Wayside Pavilion (十里长亭) outside the city!
+    { type: 'scholar',  v: 0, x: -32.8, y: 6, z: 61.5, rot: Math.PI * 0.35,  mode: 'chat' },
+    { type: 'scholar',  v: 1, x: -34.6, y: 6, z: 63.0, rot: Math.PI * 0.15,  mode: 'wave' }
+  ];
+
+  marketCast.forEach((m, i) => {
+    const rig = createCharacterRig(m.type, m.v);
+    if (m.type === 'porter' && rig.baskets) rig.baskets.forEach(b => b.visible = false);
+    rig.root.position.set(m.x, m.y, m.z);
+    rig.root.rotation.y = m.rot;
+    scene.add(rig.root);
+    animatedActors.push({ rig, mode: m.mode, phase: i * 0.7 });
+  });
+
+  // 4. CONTINUOUS TWO-WAY STREAM OF PEOPLE, HORSE CARTS & WHEELBARROWS (z = -118..+118)
+  // Dedicated traffic lanes so outbound (dir = +1) & inbound (dir = -1) flow cleanly through the 15-wide gate!
+  // Horse Carts & Covered Carriages (4 total)
+  const cartSpecs = [
+    { z: -45, dir: 1,  lane: -2.6, speed: 4.4, carriage: true,  coat: 0x7c4728 },
+    { z: 32,  dir: 1,  lane: -2.6, speed: 4.1, carriage: false, coat: 0x543624 },
+    { z: 68,  dir: -1, lane: 2.6,  speed: 4.3, carriage: true,  coat: 0xdcd6cc },
+    { z: -5,  dir: -1, lane: 2.6,  speed: 4.0, carriage: false, coat: 0x8f5634 }
+  ];
+  cartSpecs.forEach((cs) => {
+    const cart = createHorseCartRig(cs.carriage, cs.coat);
+    scene.add(cart.group);
+    roadTraffic.push({ kind: 'cart', obj: cart, z: cs.z, dir: cs.dir, lane: cs.lane, speed: cs.speed });
+  });
+
+  // Hand-pushed Wheelbarrows (3 total)
+  const barrowSpecs = [
+    { z: -18, dir: 1,  lane: -4.6, speed: 3.4 },
+    { z: 48,  dir: -1, lane: 4.6,  speed: 3.3 },
+    { z: -85, dir: -1, lane: 4.4,  speed: 3.5 }
+  ];
+  barrowSpecs.forEach((bs) => {
+    const wb = createWheelbarrowRig();
+    scene.add(wb.group);
+    roadTraffic.push({ kind: 'barrow', obj: wb, z: bs.z, dir: bs.dir, lane: bs.lane, speed: bs.speed });
+  });
+
+  // 32 Diverse Walking Pedestrians moving In and Out through Gate, Bridge & Market!
+  const walkerTypes = [
+    'scholar', 'porter', 'lady', 'merchant', 'swordsman',
+    'monk', 'porter', 'scholar', 'lady', 'child', 'merchant'
+  ];
+  for (let i = 0; i < 32; i++) {
+    const dir = (i % 2 === 0) ? 1 : -1;
+    const wType = walkerTypes[i % walkerTypes.length];
+    const rig = createCharacterRig(wType, i);
+    // Distribute evenly along z in [-114, +114]
+    const zStart = -112 + (i / 32) * 224;
+    // Outbound uses west lanes (-5.8 .. -0.8), inbound uses east lanes (+0.8 .. +5.8)
+    const laneMag = (i % 4 === 0) ? 1.1 : (4.3 + (i % 3) * 0.75);
+    const lane = dir === 1 ? -laneMag : laneMag;
+    const speed = 2.9 + (i % 5) * 0.35;
+    scene.add(rig.root);
+    roadTraffic.push({ kind: 'walker', obj: rig, z: zStart, dir, lane, speed, phase: i * 1.3 });
+  }
+
+  // 5. MOAT SAMPAN BOATS
+  for (const [bx, bz, dir] of [[-48, 26, 1], [44, 34, -1]]) {
+    const boat = createSampanBoat();
+    boat.group.position.set(bx, -0.95, bz);
+    boat.group.rotation.y = dir > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+    scene.add(boat.group);
+    moatBoats.push({ boat, x: bx, z: bz, dir, speed: 2.1 });
+  }
+
+  // 6. FLUTTERING IMPERIAL WAR BANNERS & TAVERN WINE FLAG
+  const bannerPosts = [
+    { x: -27, y: 23, z: 10, h: 11, col: PAL.vermilionBright, trim: PAL.gold },
+    { x: 27,  y: 23, z: 10, h: 11, col: PAL.vermilionBright, trim: PAL.gold },
+    { x: -55, y: 21, z: 13, h: 10, col: PAL.vermilionBright, trim: PAL.gold },
+    { x: 55,  y: 21, z: 13, h: 10, col: PAL.vermilionBright, trim: PAL.gold },
+    // Tavern Wine Banner (酒幌) on bamboo pole
+    { x: 11,  y: 11, z: -25, h: 4, col: PAL.goldBright, trim: PAL.vermilionBright, noPole: true }
+  ];
+  bannerPosts.forEach((bp, idx) => {
+    if (!bp.noPole) {
+      fillBox(bp.x, bp.y, bp.z, bp.x, bp.y + bp.h, bp.z, PAL.darkWood, MAT_SOLID, 3);
+      setVox(bp.x, bp.y + bp.h + 1, bp.z, PAL.goldBright, MAT_GLAZED, 2);
+    }
+    const flagGroup = new THREE.Group();
+    flagGroup.position.set(bp.x, bp.y + bp.h - 1.5, bp.z);
+    const strips = [];
+    for (let sIdx = 0; sIdx < 6; sIdx++) {
+      const stripGeo = new THREE.BoxGeometry(0.65, 2.2 - sIdx * 0.12, 0.22);
+      const stripMat = new THREE.MeshStandardMaterial({
+        color: sIdx === 5 ? bp.trim : bp.col,
+        roughness: 0.65
+      });
+      const strip = new THREE.Mesh(stripGeo, stripMat);
+      strip.position.x = 0.4 + sIdx * 0.62;
+      strip.castShadow = true;
+      flagGroup.add(strip);
+      strips.push(strip);
+    }
+    scene.add(flagGroup);
+    flutteringFlags.push({ strips, phase: idx * 1.4 });
+  });
+
+  // 7. SPINNING WOODEN WATERWHEEL IN EAST STREAM (x = 49.5, y = 1.8, z = 62)
+  const wheelGroup = new THREE.Group();
+  wheelGroup.position.set(49.5, 1.8, 62);
+  const bigWheelGeo = getCachedMicroGeo('stream_waterwheel', (v) => {
+    for (let dy = -11; dy <= 11; dy++) {
+      for (let dz = -11; dz <= 11; dz++) {
+        const r = Math.sqrt(dy * dy + dz * dz);
+        if ((r >= 9.2 && r <= 11.0) || Math.abs(dy) <= 0.5 || Math.abs(dz) <= 0.5 || Math.abs(Math.abs(dy) - Math.abs(dz)) <= 0.6 && r <= 10.5) {
+          addBoxVoxels(v, -2, dy, dz, 2, dy, dz, r >= 9.5 ? PAL.warmWood : PAL.darkWood);
+        }
+      }
+    }
+  }, 0.34);
+  const waterWheelMesh = new THREE.Mesh(bigWheelGeo, sharedMatChar);
+  waterWheelMesh.castShadow = true;
+  wheelGroup.add(waterWheelMesh);
+  scene.add(wheelGroup);
+
+  // 8. CIRCLING WHITE CRANES (白鹤) ABOVE MOAT & SHAN-SHUI MOUNTAINS
+  const bodyCraneGeo = getCachedMicroGeo('crane_body', (v) => {
+    addBoxVoxels(v, -1, 0, -3, 1, 1, 3, 0xf7f7f5);
+    addBoxVoxels(v, 0, 1, 3, 0, 2, 6, 0xf7f7f5);
+    v.push([0, 2, 5, PAL.lanternRed], [0, 2, 7, PAL.gold], [0, 0, -4, 0x1e2024]);
+  }, 0.24);
+  const wingCraneGeo = getCachedMicroGeo('crane_wing', (v) => {
+    addBoxVoxels(v, 0, 0, -2, 6, 0, 2, 0xf7f7f5);
+    addBoxVoxels(v, 5, 0, -2, 7, 0, 1, 0x1f2329); // Black feather wingtips!
+  }, 0.24);
+
+  for (let c = 0; c < 7; c++) {
+    const cg = new THREE.Group();
+    const cb = new THREE.Mesh(bodyCraneGeo, sharedMatChar);
+    const lw = new THREE.Mesh(wingCraneGeo, sharedMatChar);
+    lw.scale.x = -1;
+    const rw = new THREE.Mesh(wingCraneGeo, sharedMatChar);
+    cg.add(cb, lw, rw);
+    scene.add(cg);
+    flyingCranes.push({
+      group: cg, lw, rw,
+      cx: -10 + (c % 3) * 18,
+      cz: 58 + (c % 2) * 20,
+      radius: 26 + c * 4.5,
+      height: 36 + (c % 4) * 5,
+      speed: 0.22 + (c % 3) * 0.04,
+      angle: (c / 7) * Math.PI * 2
+    });
+  }
+
+  return { waterWheelMesh };
+}
+
+// ============================================================================
+// 11. ATMOSPHERIC VOXEL PARTICLES & DRIFTING MOUNTAIN CLOUDS
+// ============================================================================
+function createAtmosphereSystems(scene) {
+  // A) Drifting Translucent Voxel Cloud Clusters around the Karst Peaks
+  const clouds = [];
+  const cloudMat = new THREE.MeshLambertMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.78
+  });
+  const cloudSpots = [
+    [-72, 44, 96, 1.3], [-32, 48, 102, 1.0], [28, 46, 98, 1.2],
+    [76, 42, 92, 1.4], [-95, 38, 60, 1.0], [92, 50, 72, 1.1], [0, 56, 112, 1.5]
+  ];
+  cloudSpots.forEach(([x, y, z, sc], i) => {
+    const cg = new THREE.Group();
+    const puffs = [[0,0,0,10,3,6], [-5,-1,2,7,2.5,5], [6,-0.5,-1,8,2.5,5]];
+    puffs.forEach(([px, py, pz, sx, sy, sz]) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx * sc, sy * sc, sz * sc), cloudMat);
+      m.position.set(px * sc, py * sc, pz * sc);
+      cg.add(m);
+    });
+    cg.position.set(x, y, z);
+    scene.add(cg);
+    clouds.push({ group: cg, speed: 1.1 + (i % 3) * 0.4 });
+  });
+
+  // B) Instanced Voxel Particles: Steamed Bun Steam + Falling Peach Petals + Waterfall Mist
+  const pCount = 190;
+  const pGeo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
+  const pMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const pMesh = new THREE.InstancedMesh(pGeo, pMat, pCount);
+  pMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(pMesh);
+
+  const pData = [];
+  const dummyColor = new THREE.Color();
+  for (let i = 0; i < pCount; i++) {
+    let kind = 'petal';
+    if (i < 36) kind = 'steam';
+    else if (i < 90) kind = 'spray';
+
+    const col = kind === 'steam' ? 0xf5f5f2
+      : (kind === 'spray' ? 0xdff6fa : (i % 2 === 0 ? 0xffb8cb : 0xffdae4));
+    dummyColor.setHex(col);
+    pMesh.setColorAt(i, dummyColor);
+
+    pData.push({
+      kind,
+      t: Math.random(),
+      seed: Math.random() * 100,
+      sourceIdx: i % 3
+    });
+  }
+  pMesh.instanceColor.needsUpdate = true;
+
+  return { clouds, pMesh, pData };
+}
+
+// ============================================================================
+// 12. THREE.JS SCENE, PHYSICAL SKY IBL, 4K SHADOWS & BLOOM POST-PROCESSING
+// ============================================================================
+const container = document.getElementById('canvas-container');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const pixelRatio = Math.min(window.devicePixelRatio, 2);
+renderer.setPixelRatio(pixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9bc5de);
+scene.fog = new THREE.FogExp2(0xd8c3a5, 0.0024);
+
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.4, 900);
+camera.position.set(-44, 34, 74);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 17, 2);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.maxDistance = 250;
+controls.minDistance = 2;
+controls.update();
+
+// HDR 4x MSAA EffectComposer with UnrealBloomPass & OutputPass
+const rtWidth = Math.floor(window.innerWidth * pixelRatio);
+const rtHeight = Math.floor(window.innerHeight * pixelRatio);
+const renderTarget = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+  type: THREE.HalfFloatType,
+  samples: 4
+});
+const composer = new EffectComposer(renderer, renderTarget);
+composer.setPixelRatio(pixelRatio);
+composer.setSize(window.innerWidth, window.innerHeight);
+
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.32,  // strength
+  0.55,  // radius
+  0.88   // HDR threshold (selectively blooms lanterns, windows, braziers & specular glints!)
+);
+composer.addPass(bloomPass);
+
+const outputPass = new OutputPass();
+composer.addPass(outputPass);
+
+// Physical Atmospheric Sky + PMREM Environment Map (IBL for glazed tiles, gold & water!)
+const sky = new Sky();
+sky.scale.setScalar(1800);
+scene.add(sky);
+
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+const skyEnvScene = new THREE.Scene();
+const envSkyClone = new Sky();
+envSkyClone.scale.setScalar(400);
+skyEnvScene.add(envSkyClone);
+let currentEnvRT = null;
+
+// Distant Horizon Ground Plane outside the 256x256 voxel diorama so horizon blends seamlessly
+const horizonMat = new THREE.MeshStandardMaterial({
+  color: 0x526b42,
+  roughness: 0.96,
+  metalness: 0.0
+});
+const horizonPlane = new THREE.Mesh(new THREE.CircleGeometry(900, 64), horizonMat);
+horizonPlane.rotation.x = -Math.PI * 0.5;
+horizonPlane.position.y = -3.1;
+horizonPlane.receiveShadow = true;
+scene.add(horizonPlane);
+
+// Night Starfield Dome (visible in Lantern Night mode)
+const starCount = 700;
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(0.12 + Math.random() * 0.88);
+  const r = 460;
+  starPos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+  starPos[i * 3 + 1] = r * Math.cos(phi);
+  starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+}
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const starMat = new THREE.PointsMaterial({ color: 0xfff6e5, size: 1.7, transparent: true, opacity: 0.0, fog: false });
+const starField = new THREE.Points(starGeo, starMat);
+scene.add(starField);
+
+// Volumetric Golden-Morning / Sunset God-Ray Shafts slanting past the Gate Tower
+const sunBeamsGroup = new THREE.Group();
+const beamMat = new THREE.MeshBasicMaterial({
+  color: 0xffe2a8,
+  transparent: true,
+  opacity: 0.055,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  side: THREE.DoubleSide
+});
+for (const [bx, by, bz, sx, len] of [
+  [-18, 28, 18, 9, 68], [4, 34, 22, 12, 74], [24, 26, 16, 8, 64], [-6, 24, -18, 10, 58]
+]) {
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(sx * 0.42, sx, len, 16, 1, true), beamMat);
+  cone.position.set(bx, by, bz);
+  cone.rotation.z = -0.52;
+  cone.rotation.x = 0.28;
+  sunBeamsGroup.add(cone);
+}
+scene.add(sunBeamsGroup);
+
+// Multi-Layer Studio & Outdoor Lighting Setup
+const hemiLight = new THREE.HemisphereLight(0xcce6ff, 0x8c6d4e, 0.72);
+scene.add(hemiLight);
+
+// Primary 4096x4096 Shadow-Casting Sun / Moon Light
+const sunLight = new THREE.DirectionalLight(0xffdfa8, 3.3);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(4096, 4096);
+sunLight.shadow.camera.near = 15;
+sunLight.shadow.camera.far = 360;
+const dCam = 96;
+sunLight.shadow.camera.left = -dCam;
+sunLight.shadow.camera.right = dCam;
+sunLight.shadow.camera.top = dCam;
+sunLight.shadow.camera.bottom = -dCam;
+sunLight.shadow.bias = -0.00025;
+sunLight.shadow.normalBias = 0.035;
+sunLight.shadow.radius = 1.4;
+scene.add(sunLight);
+scene.add(sunLight.target);
+
+// Secondary Cool Sky Rim / Bounce Fill Light (sculpts shadowed walls & eaves!)
+const fillLight = new THREE.DirectionalLight(0x8cb8ff, 0.65);
+fillLight.position.set(80, 55, -75);
+scene.add(fillLight);
+
+const sunOffsetDir = new THREE.Vector3(-95, 62, 74);
+
+// 12 Warm Flickering Lantern & Brazier PointLights across Gate, Tower, Market & Pavilion
+const warmLights = [];
+const warmLightCoords = [
+  [0, 12, 0, 30, 0xff9340],     // Inside Vaulted Gate Tunnel
+  [-10, 4, 15, 22, 0xff7b2e],   // Outer West Gate Brazier
+  [10, 4, 15, 22, 0xff7b2e],    // Outer East Gate Brazier
+  [0, 35, 11, 42, 0xff8a3b],    // Outer Gate Tower Plaque & Eaves
+  [0, 35, -11, 38, 0xff8a3b],   // Inner Gate Tower Eaves
+  [-24, 26, 9, 24, 0xff7b2e],   // West Terrace Brazier & Lanterns
+  [24, 26, 9, 24, 0xff7b2e],    // East Terrace Brazier & Drum
+  [11, 9, -33, 34, 0xff8e3c],   // Grand Tavern 醉仙楼 Front
+  [-11, 9, -33, 32, 0xff8e3c],  // Silk Emporium Front
+  [12, 6, -50, 28, 0xff8533],   // Steamed Bun Stall
+  [12, 5, -67, 26, 0xff6a1f],   // Blacksmith Glowing Forge
+  [-34, 11, 62, 28, 0xff9447]   // Wayside Pavilion
+];
+warmLightCoords.forEach(([x, y, z, dist, hex]) => {
+  const pl = new THREE.PointLight(hex, 0.45, dist, 1.55);
+  pl.position.set(x, y, z);
+  scene.add(pl);
+  warmLights.push(pl);
+});
+
+// Build World Asynchronously in Quick Stages so Loading Bar Updates Smoothly!
+let worldRefs = null;
+let waterWheelRef = null;
+let atmosRef = null;
+
+function nextFrame() {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+async function initWorld() {
+  loadingStatus.textContent = 'Carving jade moat, arched marble bridge & terrain…';
+  progressBar.style.width = '25%';
+  await nextFrame();
+  buildBaseTerrainAndMoat();
+  buildTripleArchBridge();
+
+  loadingStatus.textContent = 'Raising Ming walls, bastions & Xieshan gate tower…';
+  progressBar.style.width = '52%';
+  await nextFrame();
+  buildMonumentalCityWallAndGateTower();
+
+  loadingStatus.textContent = 'Opening inner-city taverns, silk shops & karst peaks…';
+  progressBar.style.width = '74%';
+  await nextFrame();
+  buildInnerCityMarket();
+  buildOuterScenicLandscape();
+
+  loadingStatus.textContent = 'Baking voxel ambient occlusion & summoning citizens…';
+  progressBar.style.width = '92%';
+  await nextFrame();
+  const { waterWheelMesh } = populateLivingWorld(scene);
+  waterWheelRef = waterWheelMesh;
+  worldRefs = buildWorldMeshes(scene);
+  atmosRef = createAtmosphereSystems(scene);
+
+  document.getElementById('voxel-stats').textContent =
+    `${worldRefs.totalVoxels.toLocaleString()} Voxels · ${(worldRefs.totalQuads * 2).toLocaleString()} Tris · 88 Animated Figures`;
+
+  progressBar.style.width = '100%';
+  await nextFrame();
+  document.getElementById('loading-screen').classList.add('hidden');
+}
+
+// ============================================================================
+// 13. LIGHTING MOODS (WITH PHYSICAL SKY + IBL), CAMERA PRESETS & FREE-ROAM
+// ============================================================================
+const MOODS = {
+  morning: {
+    elevation: 23, azimuth: -44,
+    turbidity: 5.5, rayleigh: 2.1, mieCoefficient: 0.006, mieDirectionalG: 0.84,
+    skyVisible: true, bg: 0xc8dff0, fog: 0xdecbb2, fogDensity: 0.0021,
+    hemiSky: 0xbce0ff, hemiGnd: 0x997352, hemiInt: 0.68,
+    sunCol: 0xffdf9e, sunInt: 3.45,
+    fillCol: 0x7eb4ff, fillInt: 0.72,
+    pointInt: 0.65, glowScalar: 1.55,
+    bloomStrength: 0.30, exposure: 1.05,
+    beamOpacity: 0.055, stars: 0.0, horizonCol: 0x587044
+  },
+  day: {
+    elevation: 54, azimuth: -30,
+    turbidity: 2.6, rayleigh: 1.35, mieCoefficient: 0.003, mieDirectionalG: 0.78,
+    skyVisible: true, bg: 0x8ec2eb, fog: 0xbcdbf0, fogDensity: 0.0017,
+    hemiSky: 0xd9eeff, hemiGnd: 0x7c6c56, hemiInt: 0.78,
+    sunCol: 0xfff5e4, sunInt: 3.25,
+    fillCol: 0x91c2ff, fillInt: 0.62,
+    pointInt: 0.30, glowScalar: 1.25,
+    bloomStrength: 0.22, exposure: 1.02,
+    beamOpacity: 0.0, stars: 0.0, horizonCol: 0x557543
+  },
+  dusk: {
+    elevation: 7.5, azimuth: -58,
+    turbidity: 9.5, rayleigh: 3.4, mieCoefficient: 0.012, mieDirectionalG: 0.88,
+    skyVisible: true, bg: 0xd46e4e, fog: 0xc9785d, fogDensity: 0.0028,
+    hemiSky: 0xffa478, hemiGnd: 0x422d38, hemiInt: 0.58,
+    sunCol: 0xff7738, sunInt: 3.0,
+    fillCol: 0x6b68a8, fillInt: 0.58,
+    pointInt: 2.8, glowScalar: 2.35,
+    bloomStrength: 0.46, exposure: 1.04,
+    beamOpacity: 0.065, stars: 0.25, horizonCol: 0x3f4534
+  },
+  night: {
+    elevation: 36, azimuth: 142,
+    turbidity: 1.5, rayleigh: 0.4, mieCoefficient: 0.001, mieDirectionalG: 0.7,
+    skyVisible: false, bg: 0x091224, fog: 0x0d1930, fogDensity: 0.0032,
+    hemiSky: 0x2f4d85, hemiGnd: 0x121521, hemiInt: 0.48,
+    sunCol: 0x7faaff, sunInt: 0.95,
+    fillCol: 0x263f6b, fillInt: 0.35,
+    pointInt: 5.4, glowScalar: 2.95,
+    bloomStrength: 0.66, exposure: 1.12,
+    beamOpacity: 0.0, stars: 0.92, horizonCol: 0x111a1e
+  }
+};
+
+function applyMood(name) {
+  const m = MOODS[name] || MOODS.morning;
+  const phi = THREE.MathUtils.degToRad(90 - m.elevation);
+  const theta = THREE.MathUtils.degToRad(m.azimuth);
+  const sunDir = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
+  sunOffsetDir.copy(sunDir).multiplyScalar(145);
+
+  sky.visible = m.skyVisible;
+  const u = sky.material.uniforms;
+  u['turbidity'].value = m.turbidity;
+  u['rayleigh'].value = m.rayleigh;
+  u['mieCoefficient'].value = m.mieCoefficient;
+  u['mieDirectionalG'].value = m.mieDirectionalG;
+  u['sunPosition'].value.copy(sunDir);
+
+  // Bake matching IBL environment map so PBR glazed tiles & water reflect the sky!
+  const eu = envSkyClone.material.uniforms;
+  eu['turbidity'].value = m.turbidity;
+  eu['rayleigh'].value = m.skyVisible ? m.rayleigh : 0.18;
+  eu['mieCoefficient'].value = m.mieCoefficient;
+  eu['mieDirectionalG'].value = m.mieDirectionalG;
+  eu['sunPosition'].value.copy(m.skyVisible ? sunDir : new THREE.Vector3(0, -0.25, -1));
+  if (currentEnvRT) currentEnvRT.dispose();
+  currentEnvRT = pmremGenerator.fromScene(skyEnvScene, 0.04);
+  scene.environment = currentEnvRT.texture;
+
+  scene.background.setHex(m.bg);
+  scene.fog.color.setHex(m.fog);
+  scene.fog.density = m.fogDensity;
+  horizonMat.color.setHex(m.horizonCol);
+
+  hemiLight.color.setHex(m.hemiSky);
+  hemiLight.groundColor.setHex(m.hemiGnd);
+  hemiLight.intensity = m.hemiInt;
+
+  sunLight.color.setHex(m.sunCol);
+  sunLight.intensity = m.sunInt;
+
+  fillLight.color.setHex(m.fillCol);
+  fillLight.intensity = m.fillInt;
+  fillLight.position.set(-sunOffsetDir.x * 0.6, 55, -sunOffsetDir.z * 0.6);
+
+  warmLights.forEach(pl => {
+    pl.intensity = m.pointInt;
+    pl.userData.baseInt = m.pointInt;
+  });
+  if (worldRefs && worldRefs.matGlow) {
+    worldRefs.matGlow.color.setScalar(m.glowScalar);
+  }
+  bloomPass.strength = m.bloomStrength;
+  renderer.toneMappingExposure = m.exposure;
+
+  beamMat.opacity = m.beamOpacity;
+  beamMat.color.setHex(name === 'dusk' ? 0xff9b5e : 0xffe2a8);
+  sunBeamsGroup.visible = m.beamOpacity > 0.001;
+  starMat.opacity = m.stars;
+  starField.visible = m.stars > 0.01;
+
+  document.querySelectorAll('[data-mood]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mood === name);
+  });
+}
+
+// 6 Curated Camera Viewpoints
+const CAM_VIEWS = [
+  { pos: [-44, 34, 74],  target: [0, 17, 2] },     // 1: Grand Panorama
+  { pos: [-11, 5.5, 25], target: [0, 8, 2] },      // 2: Gatehouse Guards & Travelers
+  { pos: [33, 28, 16],   target: [-4, 29, 2] },    // 3: Tower Soldiers & Plaque
+  { pos: [0, 19, -86],   target: [0, 9, -22] },    // 4: Bustling Inner Market Overview
+  { pos: [-6, 4.8, -56], target: [8, 8, -30] },    // 5: Street-Level Tavern & Silk Shops
+  { pos: [-56, 22, 86],  target: [14, 16, 36] }    // 6: Scenic Moat, Pavilion & Waterfall
+];
+
+let camTween = null;
+let autoTour = false;
+let tourTime = 0;
+
+const tourCurvePos = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-46, 32, 76),
+  new THREE.Vector3(-6, 7.5, 42),
+  new THREE.Vector3(0, 5.5, 14),
+  new THREE.Vector3(0, 5.2, -16),
+  new THREE.Vector3(-4, 7.5, -58),
+  new THREE.Vector3(-34, 28, -68),
+  new THREE.Vector3(-28, 36, 16),
+  new THREE.Vector3(38, 34, 24),
+  new THREE.Vector3(42, 22, 78)
+], true);
+
+const tourCurveLook = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(0, 18, 0),
+  new THREE.Vector3(0, 9, 8),
+  new THREE.Vector3(0, 5.5, -12),
+  new THREE.Vector3(4, 7, -42),
+  new THREE.Vector3(8, 9, -34),
+  new THREE.Vector3(0, 22, -10),
+  new THREE.Vector3(0, 32, 0),
+  new THREE.Vector3(0, 22, 12),
+  new THREE.Vector3(10, 16, 40)
+], true);
+
+function flyToView(idx) {
+  autoTour = false;
+  document.getElementById('btn-tour').classList.remove('active');
+  const v = CAM_VIEWS[idx];
+  if (!v) return;
+  camTween = {
+    startPos: camera.position.clone(),
+    endPos: new THREE.Vector3(...v.pos),
+    startTgt: controls.target.clone(),
+    endTgt: new THREE.Vector3(...v.target),
+    t: 0
+  };
+  document.querySelectorAll('[data-cam]').forEach(b => {
+    b.classList.toggle('active', +b.dataset.cam === idx);
+  });
+}
+
+// Keyboard + FPS Pointer-Lock Free-Roam State
+const keys = new Set();
+let fpsMode = false;
+let yaw = 0, pitch = 0;
+const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+function syncEulerFromCamera() {
+  euler.setFromQuaternion(camera.quaternion, 'YXZ');
+  yaw = euler.y;
+  pitch = euler.x;
+}
+
+function setFpsMode(enable) {
+  fpsMode = enable;
+  controls.enabled = !fpsMode;
+  document.getElementById('btn-fps').classList.toggle('active', fpsMode);
+  document.getElementById('crosshair').style.display = fpsMode ? 'block' : 'none';
+  document.getElementById('fps-banner').classList.toggle('visible', fpsMode);
+
+  if (fpsMode) {
+    autoTour = false;
+    camTween = null;
+    document.getElementById('btn-tour').classList.remove('active');
+    syncEulerFromCamera();
+    if (renderer.domElement.requestPointerLock) {
+      renderer.domElement.requestPointerLock();
+    }
+  } else {
+    if (document.pointerLockElement === renderer.domElement && document.exitPointerLock) {
+      document.exitPointerLock();
+    }
+    // Seamlessly place OrbitControls target ahead of current look direction
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    controls.target.copy(camera.position).addScaledVector(fwd, 22);
+    controls.update();
+  }
+}
+
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== renderer.domElement && fpsMode) {
+    setFpsMode(false);
+  }
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!fpsMode) return;
+  const sens = 0.0022;
+  yaw -= e.movementX * sens;
+  pitch = Math.max(-Math.PI * 0.47, Math.min(Math.PI * 0.47, pitch - e.movementY * sens));
+  euler.set(pitch, yaw, 0, 'YXZ');
+  camera.quaternion.setFromEuler(euler);
+});
+
+window.addEventListener('keydown', (e) => {
+  keys.add(e.code);
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+    e.preventDefault();
+  }
+  if (e.code === 'KeyF') setFpsMode(!fpsMode);
+  else if (e.code === 'KeyT') toggleAutoTour();
+  else if (e.code === 'KeyH') document.getElementById('hud').classList.toggle('hud-hidden');
+  else if (e.code >= 'Digit1' && e.code <= 'Digit6') {
+    flyToView(parseInt(e.code.slice(5), 10) - 1);
+  }
+});
+
+window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('blur', () => keys.clear());
+
+// Cancel scripted tween when user manually orbits
+renderer.domElement.addEventListener('pointerdown', () => {
+  camTween = null;
+  if (autoTour) toggleAutoTour(false);
+});
+
+function toggleAutoTour(force) {
+  autoTour = typeof force === 'boolean' ? force : !autoTour;
+  if (autoTour) {
+    camTween = null;
+    if (fpsMode) setFpsMode(false);
+  }
+  document.getElementById('btn-tour').classList.toggle('active', autoTour);
+}
+
+// Bind HUD Buttons
+document.querySelectorAll('[data-mood]').forEach(btn => {
+  btn.addEventListener('click', () => applyMood(btn.dataset.mood));
+});
+document.querySelectorAll('[data-cam]').forEach(btn => {
+  btn.addEventListener('click', () => flyToView(+btn.dataset.cam));
+});
+document.getElementById('btn-fps').addEventListener('click', () => setFpsMode(!fpsMode));
+document.getElementById('btn-tour').addEventListener('click', () => toggleAutoTour());
+document.getElementById('btn-hud').addEventListener('click', () => {
+  document.getElementById('hud').classList.toggle('hud-hidden');
+});
+
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  bloomPass.resolution.set(w, h);
+});
+
+// ============================================================================
+// 14. REAL-TIME ANIMATION & FREE-ROAM UPDATE LOOP
+// ============================================================================
+const clock = new THREE.Clock();
+const moveForward = new THREE.Vector3();
+const moveRight = new THREE.Vector3();
+const moveDelta = new THREE.Vector3();
+const dummyMat4 = new THREE.Matrix4();
+const dummyPos = new THREE.Vector3();
+const dummyScale = new THREE.Vector3();
+const dummyQuat = new THREE.Quaternion();
+
+function updateFreeRoamCamera(dt) {
+  const fwdInput = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+  const strInput = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+  const upInput  = (keys.has('Space') || keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') || keys.has('KeyC') ? 1 : 0);
+
+  if (fwdInput !== 0 || strInput !== 0 || upInput !== 0) {
+    camTween = null;
+    if (autoTour) toggleAutoTour(false);
+
+    const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight')) ? 48 : 20;
+    camera.getWorldDirection(moveForward);
+    if (!fpsMode) {
+      // Keep WASD gliding smoothly in 3D view direction, or level if gentle pitch
+      moveForward.normalize();
+    }
+    moveRight.crossVectors(moveForward, camera.up).normalize();
+
+    moveDelta.set(0, 0, 0)
+      .addScaledVector(moveForward, fwdInput)
+      .addScaledVector(moveRight, strInput);
+    moveDelta.y += upInput;
+
+    if (moveDelta.lengthSq() > 0.0001) {
+      moveDelta.normalize().multiplyScalar(speed * dt);
+      camera.position.add(moveDelta);
+      // Clamp within world volume and above ground floor
+      camera.position.x = Math.max(-124, Math.min(124, camera.position.x));
+      camera.position.z = Math.max(-124, Math.min(124, camera.position.z));
+      camera.position.y = Math.max(1.8, Math.min(96, camera.position.y));
+      if (!fpsMode) {
+        controls.target.add(moveDelta);
+      }
+    }
+  }
+
+  if (camTween) {
+    camTween.t = Math.min(1, camTween.t + dt * 0.85);
+    const e = 1 - Math.pow(1 - camTween.t, 3);
+    camera.position.lerpVectors(camTween.startPos, camTween.endPos, e);
+    controls.target.lerpVectors(camTween.startTgt, camTween.endTgt, e);
+    if (camTween.t >= 1) camTween = null;
+  } else if (autoTour) {
+    tourTime = (tourTime + dt * 0.024) % 1;
+    tourCurvePos.getPointAt(tourTime, camera.position);
+    tourCurveLook.getPointAt(tourTime, controls.target);
+  }
+
+  if (!fpsMode) controls.update();
+}
+
+function animateWalkRig(rig, phase, amp = 0.62) {
+  const s = Math.sin(phase);
+  rig.leftLeg.rotation.x = s * amp;
+  rig.rightLeg.rotation.x = -s * amp;
+  if (rig.type !== 'porter' && rig.type !== 'lady' && rig.type !== 'child') {
+    rig.leftArm.rotation.x = -s * amp * 0.8;
+    rig.rightArm.rotation.x = s * amp * 0.8;
+  } else if (rig.type === 'lady' || rig.type === 'child') {
+    rig.leftArm.rotation.x = -s * amp * 0.65;
+  }
+  if (rig.baskets) {
+    const bob = Math.abs(Math.cos(phase)) * 0.07;
+    rig.baskets[0].position.y = 10.5 * 0.23 - bob;
+    rig.baskets[1].position.y = 10.5 * 0.23 - bob;
+  }
+}
+
+function animateScene(t, dt) {
+  // 1. Stationed Soldiers, Gate Guards, Merchants & Drummer
+  for (let i = 0; i < animatedActors.length; i++) {
+    const a = animatedActors[i];
+    const p = t * 2.4 + a.phase;
+    if (a.mode === 'drummer') {
+      a.rig.leftArm.rotation.x = -0.9 + Math.sin(t * 7.5) * 0.55;
+      a.rig.rightArm.rotation.x = -0.9 - Math.sin(t * 7.5) * 0.55;
+    } else if (a.mode === 'hammer') {
+      a.rig.rightArm.rotation.x = -0.8 + Math.sin(t * 6.2) * 0.75;
+    } else if (a.mode === 'wave') {
+      a.rig.rightArm.rotation.x = -1.35 + Math.sin(p * 1.6) * 0.35;
+      a.rig.root.rotation.y += Math.sin(p * 0.5) * 0.0015;
+    } else if (a.mode === 'work') {
+      a.rig.leftArm.rotation.x = -0.5 + Math.sin(p * 1.8) * 0.3;
+      a.rig.rightArm.rotation.x = -0.5 - Math.sin(p * 1.8) * 0.3;
+    } else if (a.mode === 'chat') {
+      a.rig.leftArm.rotation.x = -0.25 + Math.sin(p) * 0.18;
+    } else {
+      // Sentry / Guard subtle breathing & vigilance
+      a.rig.rightArm.rotation.x = -0.18 + Math.sin(p * 0.7) * 0.05;
+    }
+  }
+
+  // 2. Patrolling Soldiers on the City Wall
+  for (let i = 0; i < patrollingSoldiers.length; i++) {
+    const ps = patrollingSoldiers[i];
+    const span = ps.x2 - ps.x1;
+    ps.prog += (ps.speed * dt * ps.dir) / span;
+    if (ps.prog > 1) { ps.prog = 1; ps.dir = -1; }
+    else if (ps.prog < 0) { ps.prog = 0; ps.dir = 1; }
+    ps.rig.root.position.set(ps.x1 + ps.prog * span, ps.y, ps.z);
+    ps.rig.root.rotation.y = ps.dir > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+    animateWalkRig(ps.rig, t * 6.5 + i, 0.55);
+  }
+
+  // 3. Continuous Road Traffic (Pedestrians, Horse Carts, Carriages & Wheelbarrows)
+  for (let i = 0; i < roadTraffic.length; i++) {
+    const tr = roadTraffic[i];
+    tr.z += tr.dir * tr.speed * dt;
+    if (tr.z > 116) tr.z = -116;
+    else if (tr.z < -116) tr.z = 116;
+
+    const zAhead = tr.z + tr.dir * 1.2;
+    const cxNow = getRoadCenterX(tr.z);
+    const cxAhead = getRoadCenterX(zAhead);
+    const yNow = getRoadSurfaceY(tr.z);
+    const yAhead = getRoadSurfaceY(zAhead);
+
+    const wx = cxNow + tr.lane;
+    const wxAhead = cxAhead + tr.lane;
+    const heading = Math.atan2(wxAhead - wx, zAhead - tr.z);
+    const slopePitch = Math.atan2(yAhead - yNow, 1.2);
+
+    if (tr.kind === 'walker') {
+      const wPhase = t * tr.speed * 2.3 + tr.phase;
+      const bounce = Math.abs(Math.sin(wPhase)) * 0.06;
+      tr.obj.root.position.set(wx, yNow + bounce, tr.z);
+      tr.obj.root.rotation.y = heading;
+      animateWalkRig(tr.obj, wPhase, 0.62);
+    } else if (tr.kind === 'barrow') {
+      const wPhase = t * tr.speed * 2.4 + i;
+      tr.obj.group.position.set(wx, yNow, tr.z);
+      tr.obj.group.rotation.set(-slopePitch * 0.6, heading, 0);
+      animateWalkRig(tr.obj.pusher, wPhase, 0.55);
+    } else if (tr.kind === 'cart') {
+      const hPhase = t * tr.speed * 2.5 + i;
+      tr.obj.group.position.set(wx, yNow, tr.z);
+      tr.obj.group.rotation.set(-slopePitch * 0.65, heading, 0);
+      tr.obj.horseLegs[0].rotation.x = Math.sin(hPhase) * 0.55;
+      tr.obj.horseLegs[1].rotation.x = -Math.sin(hPhase) * 0.55;
+      tr.obj.horseLegs[2].rotation.x = -Math.sin(hPhase) * 0.55;
+      tr.obj.horseLegs[3].rotation.x = Math.sin(hPhase) * 0.55;
+      tr.obj.wheels[0].rotation.x += tr.speed * dt * 1.4;
+      tr.obj.wheels[1].rotation.x += tr.speed * dt * 1.4;
+    }
+  }
+
+  // 4. Moat Sampan Boats gliding gently under & past the Stone Bridge
+  for (let i = 0; i < moatBoats.length; i++) {
+    const mb = moatBoats[i];
+    mb.x += mb.dir * mb.speed * dt;
+    if (i === 0) {
+      // Boat 0 glides all the way across the moat right underneath the grand central arch (z = 30)!
+      if (mb.x > 105) { mb.x = 105; mb.dir = -1; }
+      else if (mb.x < -105) { mb.x = -105; mb.dir = 1; }
+    } else {
+      // Boat 1 cruises the scenic East Moat between the bridge and waterfall stream
+      if (mb.x > 108) { mb.x = 108; mb.dir = -1; }
+      else if (mb.x < 17) { mb.x = 17; mb.dir = 1; }
+    }
+    const targetZ = i === 0 ? 30.0 : 28.0;
+    mb.boat.group.position.set(mb.x, -0.95 + Math.sin(t * 2 + i) * 0.05, targetZ);
+    mb.boat.group.rotation.y = mb.dir > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+    mb.boat.group.rotation.z = Math.sin(t * 1.7 + i) * 0.03;
+    mb.boat.boatman.rightArm.rotation.x = -0.6 + Math.sin(t * 2.0 + i) * 0.35;
+  }
+
+  // 5. Fluttering Imperial Flags & Waterwheel
+  for (let i = 0; i < flutteringFlags.length; i++) {
+    const fl = flutteringFlags[i];
+    for (let s = 0; s < fl.strips.length; s++) {
+      fl.strips[s].position.z = Math.sin(t * 5.2 - s * 0.65 + fl.phase) * (s * 0.09);
+    }
+  }
+  if (waterWheelRef) {
+    waterWheelRef.rotation.x = -t * 0.85;
+  }
+
+  // 6. Circling Cranes & Atmospheric Particles
+  for (let i = 0; i < flyingCranes.length; i++) {
+    const cr = flyingCranes[i];
+    const ang = cr.angle + t * cr.speed;
+    const nx = cr.cx + Math.cos(ang) * cr.radius;
+    const nz = cr.cz + Math.sin(ang) * cr.radius * 0.72;
+    cr.group.position.set(nx, cr.height + Math.sin(t * 1.5 + i) * 1.2, nz);
+    cr.group.rotation.y = Math.atan2(-Math.sin(ang) * cr.radius, Math.cos(ang) * cr.radius * 0.72);
+    const flap = Math.sin(t * 6.5 + i * 1.4) * 0.55;
+    cr.lw.rotation.z = -flap;
+    cr.rw.rotation.z = flap;
+  }
+
+  if (atmosRef) {
+    for (let i = 0; i < atmosRef.clouds.length; i++) {
+      const cl = atmosRef.clouds[i];
+      cl.group.position.x += cl.speed * dt;
+      if (cl.group.position.x > 132) cl.group.position.x = -132;
+    }
+
+    const { pMesh, pData } = atmosRef;
+    for (let i = 0; i < pData.length; i++) {
+      const p = pData[i];
+      p.t = (p.t + dt * (p.kind === 'spray' ? 0.65 : 0.22)) % 1;
+
+      if (p.kind === 'steam') {
+        // Rising white steam above Steamed Bun Stall & Blacksmith Forge
+        const isBun = p.sourceIdx !== 2;
+        const sx = isBun ? 12.6 : 13.5;
+        const sz = isBun ? -48.6 : -66.8;
+        const sy = isBun ? 6.2 : 4.0;
+        dummyPos.set(
+          sx + Math.sin(t * 2 + p.seed) * p.t * 1.4,
+          sy + p.t * 7.5,
+          sz + Math.cos(t * 1.7 + p.seed) * p.t * 1.4
+        );
+        const sc = (1 - p.t * 0.5) * 1.3;
+        dummyScale.setScalar(sc);
+      } else if (p.kind === 'spray') {
+        // Waterfall mist & splash at x = 55, z = 96
+        dummyPos.set(
+          53.5 + (p.seed % 4) + Math.sin(p.seed + t * 3) * 1.2,
+          0.4 + Math.sin(p.t * Math.PI) * 5.2,
+          95.2 + Math.cos(p.seed) * 2.2 - p.t * 2.5
+        );
+        dummyScale.setScalar(1.1 - p.t * 0.6);
+      } else {
+        // Drifting pink peach blossom petals across outer west grove & moat
+        dummyPos.set(
+          -75 + ((p.seed * 1.7 + t * 1.8) % 120),
+          14 - p.t * 13.5,
+          24 + ((p.seed * 2.3) % 66) + Math.sin(t + p.seed) * 2.5
+        );
+        dummyScale.setScalar(0.75);
+      }
+      dummyMat4.compose(dummyPos, dummyQuat, dummyScale);
+      pMesh.setMatrixAt(i, dummyMat4);
+    }
+    pMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // Animate shimmering water wave ripples & texel-snapped 4K shadow focus
+  if (worldRefs && worldRefs.waterUniforms) {
+    worldRefs.waterUniforms.uTime.value = t;
+  }
+  const snapX = Math.round(Math.max(-65, Math.min(65, controls.target.x)) * 0.5) * 2;
+  const snapZ = Math.round(Math.max(-65, Math.min(65, controls.target.z)) * 0.5) * 2;
+  sunLight.target.position.set(snapX, 0, snapZ);
+  sunLight.position.set(snapX + sunOffsetDir.x, sunOffsetDir.y, snapZ + sunOffsetDir.z);
+
+  // Subtle torch/lantern candle-flicker
+  for (let i = 0; i < warmLights.length; i++) {
+    const base = warmLights[i].userData.baseInt ?? 0.65;
+    warmLights[i].intensity = base * (0.93 + Math.sin(t * 7.1 + i * 2.3) * 0.07);
+  }
+}
+
+// Kick off initialization & HDR Bloom render loop!
+initWorld().then(() => {
+  applyMood('morning');
+  function loop() {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, clock.getDelta());
+    const elapsed = clock.elapsedTime;
+    updateFreeRoamCamera(dt);
+    animateScene(elapsed, dt);
+    composer.render();
+  }
+  loop();
+});
+</script>
+</body>
+</html>
