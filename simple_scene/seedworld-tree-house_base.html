@@ -1,0 +1,2666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SeedWorld Voxel Lighting Study · 统一色块柔光渲染实验</title>
+  <style>
+    :root {
+      --bg-panel: rgba(16, 20, 28, 0.72);
+      --border-panel: rgba(255, 255, 255, 0.14);
+      --text-main: #f3f6fb;
+      --text-sub: #a8b6cc;
+      --accent: #7ae28a;
+      --accent-warm: #ffbe6b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #141a24;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text-main);
+      user-select: none;
+    }
+    #canvas-wrap { width: 100%; height: 100%; position: relative; }
+    canvas { display: block; width: 100%; height: 100%; outline: none; }
+
+    /* Loading overlay */
+    #loader {
+      position: fixed; inset: 0; z-index: 40;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 40%, #243246, #11161f);
+      transition: opacity 0.45s ease;
+      gap: 12px;
+    }
+    #loader.fade { opacity: 0; pointer-events: none; }
+    .loader-title { font-size: 18px; font-weight: 700; letter-spacing: 0.4px; }
+    .loader-sub { font-size: 13px; color: var(--text-sub); }
+    .loader-bar {
+      width: 240px; height: 6px; border-radius: 999px; overflow: hidden;
+      background: rgba(255,255,255,0.12);
+    }
+    .loader-fill {
+      width: 35%; height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, #5cc976, #80d8ff);
+      transition: width 0.25s ease;
+    }
+
+    /* Glassmorphic HUD */
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; transition: opacity 0.25s ease; }
+    #hud.hidden { opacity: 0; }
+    #hud.hidden .panel { pointer-events: none !important; }
+
+    .panel {
+      pointer-events: auto;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-panel);
+      border-radius: 14px;
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.36);
+    }
+
+    #info-card {
+      position: absolute; top: 12px; left: 12px;
+      padding: 10px 12px; max-width: min(278px, 44vw);
+    }
+    .badge-row { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+    .icon-box {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: linear-gradient(135deg, #4db862, #2e7d5f);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; box-shadow: 0 4px 12px rgba(77, 184, 98, 0.35);
+    }
+    h1 { font-size: 14px; font-weight: 700; line-height: 1.2; }
+    .subtitle { font-size: 10.8px; color: var(--text-sub); margin-top: 2px; }
+    .stats-row {
+      display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0;
+      font-size: 10.8px; color: #dbe6f5;
+    }
+    .stat-pill {
+      padding: 2px 7px; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+    }
+    .stat-pill b { color: var(--accent); font-weight: 600; }
+    .note-box {
+      font-size: 10.8px; line-height: 1.42; color: #cad6e8;
+      padding: 6px 8px; border-radius: 8px;
+      background: rgba(122, 226, 138, 0.09);
+      border-left: 3px solid var(--accent);
+    }
+    .swatch-strip {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; align-items: center;
+      font-size: 10px; color: var(--text-sub);
+    }
+    .swatch {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(255,255,255,0.06); padding: 2px 5px; border-radius: 5px;
+    }
+    .swatch i {
+      width: 9px; height: 9px; border-radius: 2px; display: inline-block;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    /* Controls panel */
+    #ctrl-card {
+      position: absolute; top: 12px; right: 12px;
+      padding: 8px 10px; width: min(302px, 46vw);
+      display: flex; flex-direction: column; gap: 5px;
+      max-height: calc(100vh - 24px); overflow-y: auto;
+    }
+    .sec-title {
+      font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.6px;
+      color: var(--text-sub); font-weight: 700; margin-bottom: 3px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .btn-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4ecf8; font-size: 10.5px; font-weight: 500;
+      padding: 3.5px 5.5px; border-radius: 7px; cursor: pointer;
+      transition: all 0.16s ease; text-align: center;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .chip:hover { background: rgba(255, 255, 255, 0.14); border-color: rgba(255,255,255,0.28); }
+    .chip.active {
+      background: rgba(122, 226, 138, 0.22);
+      border-color: rgba(122, 226, 138, 0.75);
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(122, 226, 138, 0.25) inset;
+    }
+    .chip.warm.active {
+      background: rgba(255, 190, 107, 0.24);
+      border-color: rgba(255, 190, 107, 0.8);
+    }
+    .chip.preset.active {
+      background: rgba(114, 194, 255, 0.24);
+      border-color: rgba(114, 194, 255, 0.82);
+    }
+    .chip.flow.active {
+      background: rgba(78, 224, 210, 0.22);
+      border-color: rgba(78, 224, 210, 0.82);
+    }
+    .slider-wrap { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+    input[type="range"] {
+      flex: 1; accent-color: #ffbe6b; cursor: pointer; height: 5px;
+    }
+    #time-label { font-size: 11px; color: var(--accent-warm); min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+    #mode-desc {
+      font-size: 10px; color: #c7d4e6; line-height: 1.32;
+      background: rgba(0, 0, 0, 0.24); padding: 4px 6px; border-radius: 7px;
+    }
+
+    /* Bottom camera bar */
+    #cam-bar {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      padding: 7px 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+      max-width: calc(100vw - 32px);
+    }
+    .cam-btn {
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      color: #e6eef9; font-size: 11.5px; font-weight: 500;
+      padding: 6px 11px; border-radius: 999px; cursor: pointer;
+      transition: all 0.16s ease;
+    }
+    .cam-btn:hover { background: rgba(255,255,255,0.15); }
+    .cam-btn.active {
+      background: rgba(122, 226, 138, 0.24);
+      border-color: rgba(122, 226, 138, 0.82);
+      color: #fff;
+    }
+
+    #show-hud-btn {
+      position: fixed; top: 16px; right: 16px; z-index: 20;
+      display: none; padding: 7px 12px; font-size: 12px; cursor: pointer;
+    }
+    #show-hud-btn.visible { display: block; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="loader">
+    <div class="loader-title">🌳 SeedWorld 统一色块柔光渲染实验</div>
+    <div class="loader-sub" id="loader-status">正在构建树林、小屋体素与 48 射线天光半球采样…</div>
+    <div class="loader-bar"><div class="loader-fill" id="loader-fill"></div></div>
+  </div>
+
+  <div id="canvas-wrap"></div>
+
+  <button id="show-hud-btn" class="panel chip">👁️ 显示界面 (H)</button>
+
+  <div id="hud">
+    <div id="info-card" class="panel">
+      <div class="badge-row">
+        <div class="icon-box">🏡</div>
+        <div>
+          <h1>SeedWorld 统一色块渲染测试</h1>
+          <div class="subtitle">树林 × 田园小屋 × Golden Spiral 天光全局遮蔽</div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <span class="stat-pill">体素: <b id="stat-vox">-</b></span>
+        <span class="stat-pill">面片: <b id="stat-tris">-</b></span>
+        <span class="stat-pill">帧率: <b id="stat-fps">-</b> FPS</span>
+        <span class="stat-pill">耗时: <b id="stat-ms">-</b> ms</span>
+      </div>
+      <div class="note-box">
+        <b>严格基色 + 通用自动色流：</b>网格基色每类材质仅用同 1 个固定色号，无任何噪点杂色；右侧「<b>全物件自动色流</b>」与「地表流淌」统一用平滑 3D 色场 + 高度/湿润接地算法，自动赋予树冠、红瓦、白墙、木梁、石头与岩土以自然温润的流动层次。
+      </div>
+      <div class="swatch-strip">
+        <span>材质固定色块：</span>
+        <span class="swatch"><i id="leaf-dot" style="background:#82c928"></i>树叶(<button class="leaf-pick active" data-leaf="0x82c928" title="SeedWorld 嫩黄绿" style="background:#82c928;border:1px solid #fff;width:11px;height:11px;border-radius:3px;cursor:pointer;"></button><button class="leaf-pick" data-leaf="0x3f9c3a" title="原深翠绿" style="background:#3f9c3a;border:1px solid rgba(255,255,255,0.4);width:11px;height:11px;border-radius:3px;cursor:pointer;margin-left:2px;"></button><button class="leaf-pick" data-leaf="0xd96426" title="SeedWorld 秋叶橘" style="background:#d96426;border:1px solid rgba(255,255,255,0.4);width:11px;height:11px;border-radius:3px;cursor:pointer;margin-left:2px;"></button>)</span>
+        <span class="swatch"><i style="background:#59a645"></i>草地</span>
+        <span class="swatch"><i style="background:#ece2cf"></i>白墙</span>
+        <span class="swatch"><i style="background:#b7543e"></i>红瓦</span>
+        <span class="swatch"><i style="background:#6e472b"></i>原木</span>
+        <span class="swatch"><i style="background:#8f979e"></i>石料</span>
+      </div>
+    </div>
+
+    <div id="ctrl-card" class="panel">
+      <div>
+        <div class="sec-title">一键方案对比 (Presets)</div>
+        <div class="btn-grid">
+          <button class="chip preset" data-preset="soft">🌿 柔和纯色</button>
+          <button class="chip preset" data-preset="vivid">🎨 博客原版风</button>
+          <button class="chip preset active" data-preset="stylized">✨ 进阶风格化+</button>
+          <button class="chip preset" data-preset="pagoda">🏯 五重塔管线</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">天光遮蔽算法 (0ms 实时切换)</div>
+        <div class="btn-grid">
+          <button class="chip" data-mode="0">0. 纯色块原貌</button>
+          <button class="chip" data-mode="1">1. 普通直光 + AO</button>
+          <button class="chip" data-mode="2">2. 原版逐面48线</button>
+          <button class="chip" data-mode="3">3. 柔和连续22.5m</button>
+        </div>
+        <div class="btn-grid" style="margin-top:5px;">
+          <button class="chip" data-mode="4">4. 上一场景 SkyGI</button>
+          <button class="chip active" data-mode="5">5. 原图高饱和风 🎨</button>
+        </div>
+      </div>
+
+      <div id="mode-desc">
+        <b>✨ 进阶风格化+</b>：以 0ms 纯 GPU/体素算法叠加「弯曲法线 + 3D彩光溢色 + 法线微倒角 + 植物半透SSS」，让单一纯色块兼具雕塑弧度与通透质感！
+      </div>
+
+      <div>
+        <div class="sec-title">
+          <span>全物件自动色流 (Object Flow)</span>
+          <span id="flow-str-label" style="color:#4ee0d2;font-variant-numeric:tabular-nums;">78%</span>
+        </div>
+        <div class="btn-grid">
+          <button class="chip flow active" data-flow="3">🌊 生态复合(推荐)</button>
+          <button class="chip flow" data-flow="1">🎨 3D色域漫流</button>
+          <button class="chip flow" data-flow="2">🌿 高度接地融合</button>
+          <button class="chip flow" data-flow="0">🚫 关闭(纯单色)</button>
+        </div>
+        <div class="slider-wrap">
+          <span style="font-size:10px;color:var(--text-sub);white-space:nowrap;">色流力度</span>
+          <input id="flow-slider" type="range" min="0" max="150" step="1" value="78" style="accent-color:#4ee0d2;" />
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">风格化与可组合模块 (自由开关叠加)</div>
+        <div class="btn-grid">
+          <button class="chip active" id="btn-bent">🧭 弯曲法线 BentN</button>
+          <button class="chip active" id="btn-bleed">🌈 3D彩光溢色</button>
+          <button class="chip active" id="btn-nbevel">💎 GGX棱角倒角</button>
+          <button class="chip active" id="btn-sss">🍃 树冠厚度散射</button>
+          <button class="chip active" id="btn-biome">🌊 地表生态流淌</button>
+          <button class="chip active" id="btn-water">💧 清澈透底水体</button>
+          <button class="chip active" id="btn-dof">📷 移轴景深 DoF</button>
+          <button class="chip" id="btn-pbr">🧱 PBR 4材质分桶</button>
+          <button class="chip" id="btn-seams">🧊 暗边网格描线</button>
+          <button class="chip" id="btn-dirao">📐 六向明度&amp;强AO</button>
+          <button class="chip" id="btn-shadowmap">🌤️ PCF 太阳投影</button>
+          <button class="chip" id="btn-fog">🌫️ 大气指数雾</button>
+        </div>
+        <div class="btn-row" style="margin-top:4px;">
+          <button class="chip" id="btn-bloom" style="flex:1">✨ Bloom&amp;暖点光 (日落/暮色推荐)</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">昼夜天光时间轴 <span id="time-label">10:34</span></div>
+        <div class="btn-row">
+          <button class="chip warm" data-tod="0.28">🌅 清晨</button>
+          <button class="chip warm active" data-tod="0.44">☀️ 上午</button>
+          <button class="chip warm" data-tod="0.72">🌇 日落</button>
+          <button class="chip warm" data-tod="0.84">🌆 暮色</button>
+        </div>
+        <div class="slider-wrap">
+          <input id="tod-slider" type="range" min="0.20" max="0.92" step="0.005" value="0.44" />
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="chip" id="btn-orbit" style="flex:1">🔄 自动环绕</button>
+        <button class="chip" id="btn-hide" style="flex:1">👁️ 隐藏UI (H)</button>
+      </div>
+    </div>
+
+    <div id="cam-bar" class="panel">
+      <button class="cam-btn active" data-cam="overview">🏡 全景庭院</button>
+      <button class="cam-btn" data-cam="tree">🌳 树冠与柔和树荫</button>
+      <button class="cam-btn" data-cam="canopy">🍃 仰视树冠内腔</button>
+      <button class="cam-btn" data-cam="eaves">🏠 小屋屋檐与木堆</button>
+      <button class="cam-btn" data-cam="brook">💧 溪畔倒影视角</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    const tStart = performance.now();
+    const loaderFill = document.getElementById('loader-fill');
+    const loaderStatus = document.getElementById('loader-status');
+
+    // =========================================================================
+    // 1. STRICT UNIFORM BLOCK DEFINITIONS (Zero per-voxel color variation!)
+    // =========================================================================
+    const WX = 80, WY = 56, WZ = 80;
+    const WATER_Y = 10;
+
+    const MAT_EMPTY  = 0;
+    const MAT_GRASS  = 1;
+    const MAT_DIRT   = 2;
+    const MAT_STONE  = 3;
+    const MAT_TRUNK  = 4;
+    const MAT_LEAF   = 5;
+    const MAT_WALL   = 6;
+    const MAT_ROOF   = 7;
+    const MAT_TIMBER = 8;
+    const MAT_GLOW   = 9;
+    const MAT_FLOWER_W = 10;
+    const MAT_FLOWER_Y = 11;
+    const MAT_LEAF_AUTUMN = 13; // Companion accent sapling when Biome Flow ON
+    const MAT_LEAF_PINE   = 14; // Companion deep pine sapling when Biome Flow ON
+    const MAT_WATER  = 12; // Stored separately for translucent animated brook
+
+    // Exactly ONE fixed color per block type — zero noise, zero dithering!
+    const PALETTE_HEX = {
+      [MAT_GRASS]:       0x59a645,
+      [MAT_DIRT]:        0x7a5538,
+      [MAT_STONE]:       0x8f979e,
+      [MAT_TRUNK]:       0x6e472b,
+      [MAT_LEAF]:        0x82c928, // SeedWorld warm yellow-green base (bright chartreuse lit -> deep teal-emerald shadow)
+      [MAT_LEAF_AUTUMN]: 0xd96426, // SeedWorld Foliage_2 autumn orange accent
+      [MAT_LEAF_PINE]:   0x28844c, // SeedWorld Foliage_1 deep emerald pine accent
+      [MAT_WALL]:        0xece2cf,
+      [MAT_ROOF]:     0xb7543e,
+      [MAT_TIMBER]:   0x8a5834,
+      [MAT_GLOW]:     0xffd888,
+      [MAT_FLOWER_W]: 0xf7f2e8,
+      [MAT_FLOWER_Y]: 0xf2c84b,
+      [MAT_WATER]:    0x3393b5
+    };
+
+    const grid = new Uint8Array(WX * WY * WZ);
+    const idxAt = (x, y, z) => (y * WZ + z) * WX + x;
+    const inBounds = (x, y, z) => x >= 0 && x < WX && y >= 0 && y < WY && z >= 0 && z < WZ;
+
+    function setVox(x, y, z, mat) {
+      const ix = Math.round(x), iy = Math.round(y), iz = Math.round(z);
+      if (inBounds(ix, iy, iz)) grid[idxAt(ix, iy, iz)] = mat;
+    }
+    function getVox(x, y, z) {
+      if (!inBounds(x, y, z)) return MAT_EMPTY;
+      return grid[idxAt(x, y, z)];
+    }
+    function fillBox(x0, y0, z0, x1, y1, z1, mat) {
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++)
+          for (let x = x0; x <= x1; x++)
+            setVox(x, y, z, mat);
+    }
+
+    // Smooth deterministic 2D value noise for terrain height only (NEVER for color!)
+    function hash2(x, z) {
+      const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453123;
+      return s - Math.floor(s);
+    }
+    function smoothNoise(x, z) {
+      const ix = Math.floor(x), iz = Math.floor(z);
+      const fx = x - ix, fz = z - iz;
+      const ux = fx * fx * (3 - 2 * fx);
+      const uz = fz * fz * (3 - 2 * fz);
+      const a = hash2(ix, iz), b = hash2(ix + 1, iz);
+      const c = hash2(ix, iz + 1), d = hash2(ix + 1, iz + 1);
+      return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+    }
+
+    // =========================================================================
+    // 2. PROCEDURAL SCENE: SEEDWORLD MEADOW, RADIAL-BOUGH TREE & SMALL COTTAGE
+    // =========================================================================
+    const groundY = new Int16Array(WX * WZ);
+    const brookMask = new Uint8Array(WX * WZ);
+
+    function terrainHeight(x, z) {
+      // Base gentle SeedWorld rolling terrain (lower in front so cottage porch, tree shadow & brook stay clear!)
+      let h = 11.2
+        + smoothNoise(x * 0.055 + 2.1, z * 0.055 + 4.3) * 3.2
+        + smoothNoise(x * 0.12 - 1.4, z * 0.12 + 0.9) * 1.1;
+
+      // Gently slope front edge down slightly for open view of meadow shadow & stream
+      if (z > 48) {
+        const frontSlope = Math.min(1, (z - 48) / 28);
+        h -= frontSlope * 2.1;
+      }
+
+      // Tree mound around (25, 36)
+      const dxT = x - 25, dzT = z - 36;
+      h += Math.exp(-(dxT * dxT + dzT * dzT) / 145) * 1.9;
+
+      // Flattened cottage terrace around (53, 35)
+      const dxH = (x - 53) / 13, dzH = (z - 35) / 12;
+      const dH = Math.sqrt(dxH * dxH + dzH * dzH);
+      const flatW = Math.max(0, 1 - Math.max(0, (dH - 0.85) / 0.45));
+      h = h * (1 - flatW) + 12.2 * flatW;
+
+      // Small front-right brook hollow curving across front-right meadow
+      const curveX = 46 + (79 - z) * 0.56 + Math.sin(z * 0.13) * 3.5;
+      const distStream = Math.abs(x - curveX);
+      const pondDist = Math.hypot((x - 52) * 0.85, (z - 62) * 0.95);
+      const carve = Math.max(
+        Math.max(0, 1 - distStream / 5.4),
+        Math.max(0, 1 - pondDist / 10.5)
+      );
+      if (z > 48 && carve > 0) {
+        h -= carve * 6.2;
+      }
+      return Math.max(6, Math.round(h));
+    }
+
+    for (let z = 0; z < WZ; z++) {
+      for (let x = 0; x < WX; x++) {
+        const h = terrainHeight(x, z);
+        groundY[z * WX + x] = h;
+        const isBrook = h <= WATER_Y - 1;
+        if (isBrook) brookMask[z * WX + x] = 1;
+
+        for (let y = 0; y <= h; y++) {
+          let mat = MAT_DIRT;
+          if (y === h) {
+            mat = isBrook ? MAT_STONE : MAT_GRASS;
+          } else if (y < 5) {
+            mat = MAT_STONE;
+          }
+          setVox(x, y, z, mat);
+        }
+      }
+    }
+
+    // SeedWorld Tree (Multi-bough radial ellipsoids + tapered trunk + exposed branches)
+    function buildSeedWorldTree(tx, tz) {
+      const baseY = groundY[tz * WX + tx];
+
+      // Flared roots & curved solid trunk
+      const trunkTop = baseY + 10;
+      for (let dy = -1; dy <= 10; dy++) {
+        const t = Math.max(0, dy) / 10;
+        const rad = dy <= 1 ? 2.45 - dy * 0.35 : (1.75 - t * 0.72);
+        const cx = tx + Math.sin(t * 2.2) * 1.1;
+        const cz = tz + Math.cos(t * 1.8) * 0.6 - 0.6;
+        const rCeil = Math.ceil(rad + 0.5);
+        for (let ox = -rCeil; ox <= rCeil; ox++) {
+          for (let oz = -rCeil; oz <= rCeil; oz++) {
+            const dist = Math.hypot(ox, oz);
+            // Organic root buttresses on base
+            const flare = dy <= 2 ? Math.cos(Math.atan2(oz, ox) * 4) * (0.55 * (1 - Math.max(0, dy) / 2.5)) : 0;
+            if (dist <= rad + flare) {
+              setVox(cx + ox, baseY + dy, cz + oz, MAT_TRUNK);
+            }
+          }
+        }
+      }
+
+      // Helper matching SeedWorld's ShapeTest.InsideEllipsoid + organic lobe perturbation
+      function placeFoliageBough(cx, cy, cz, rx, ry, rz, seedOffset) {
+        const bx = Math.ceil(rx + 1), by = Math.ceil(ry + 1), bz = Math.ceil(rz + 1);
+        for (let y = -by; y <= by; y++) {
+          for (let z = -bz; z <= bz; z++) {
+            for (let x = -bx; x <= bx; x++) {
+              const nx = x / rx, ny = y / ry, nz = z / rz;
+              const d2 = nx * nx + ny * ny + nz * nz;
+              const ang = Math.atan2(z, x);
+              const lobe = 0.08 * Math.sin(ang * 3 + seedOffset) + 0.06 * Math.cos((y + seedOffset) * 1.1);
+              if (d2 <= 1.0 + lobe) {
+                const vx = Math.round(cx + x);
+                const vy = Math.round(cy + y);
+                const vz = Math.round(cz + z);
+                if (getVox(vx, vy, vz) !== MAT_TRUNK) {
+                  setVox(vx, vy, vz, MAT_LEAF);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Draw exposed woody boughs radiating from upper trunk into foliage clusters
+      function drawBranch(x0, y0, z0, x1, y1, z1) {
+        const steps = 18;
+        for (let i = 0; i <= steps; i++) {
+          const u = i / steps;
+          const bx = x0 + (x1 - x0) * u;
+          const by = y0 + (y1 - y0) * u - Math.sin(u * Math.PI) * 0.6;
+          const bz = z0 + (z1 - z0) * u;
+          const thick = u < 0.5 ? 1 : 0;
+          for (let ox = 0; ox <= thick; ox++)
+            for (let oz = 0; oz <= thick; oz++)
+              setVox(bx + ox, by, bz + oz, MAT_TRUNK);
+        }
+      }
+
+      // SeedWorld radial pattern: 6 perimeter boughs + 1 central crown bough + 2 lower overhanging lobes
+      const boughs = [
+        { ang: 0.2,  dist: 7.4, dy: 2.5, rx: 7.0, ry: 4.5, rz: 6.5 },
+        { ang: 1.25, dist: 6.8, dy: 4.2, rx: 6.5, ry: 4.8, rz: 6.2 },
+        { ang: 2.35, dist: 7.8, dy: 1.4, rx: 7.2, ry: 4.3, rz: 6.8 },
+        { ang: 3.35, dist: 6.5, dy: 3.6, rx: 6.4, ry: 4.6, rz: 6.2 },
+        { ang: 4.45, dist: 7.5, dy: 2.0, rx: 6.9, ry: 4.4, rz: 6.6 },
+        { ang: 5.45, dist: 6.4, dy: 4.8, rx: 6.0, ry: 4.2, rz: 5.8 },
+      ];
+
+      boughs.forEach((b, idx) => {
+        const bx = tx + Math.cos(b.ang) * b.dist;
+        const bz = tz + Math.sin(b.ang) * b.dist;
+        const by = trunkTop + b.dy;
+        drawBranch(tx, trunkTop - 2, tz, bx - Math.cos(b.ang) * 1.5, by - 1.5, bz - Math.sin(b.ang) * 1.5);
+        placeFoliageBough(bx, by, bz, b.rx, b.ry, b.rz, idx * 1.7);
+      });
+
+      // Central top canopy & secondary lower front bough (casts rich soft shadow onto meadow!)
+      placeFoliageBough(tx, trunkTop + 7.2, tz, 7.6, 5.0, 7.4, 9.1);
+      placeFoliageBough(tx + 5.2, trunkTop + 0.5, tz + 6.5, 5.4, 3.6, 5.2, 4.4);
+      placeFoliageBough(tx - 6.0, trunkTop + 0.2, tz + 4.8, 5.0, 3.4, 4.8, 7.2);
+    }
+
+    // Small Half-Timbered Cottage with Deep Overhanging Roof, Chimney, Porch & Woodpile
+    function buildCottage(cx, cz) {
+      const baseY = 12; // Terrace elevation matching meadow
+      const halfW = 8;  // X: cx-8 .. cx+8 (17 wide)
+      const halfD = 7;  // Z: cz-7 .. cz+7 (15 deep)
+      const wallH = 8;  // Walls from baseY+2 .. baseY+9
+
+      // 1. Stone foundation plinth & front porch steps (faces +Z toward meadow/brook)
+      fillBox(cx - halfW - 1, baseY - 2, cz - halfD - 1, cx + halfW + 1, baseY + 1, cz + halfD + 1, MAT_STONE);
+      // Porch stoop & stairs
+      fillBox(cx - 3, baseY, cz + halfD + 2, cx + 3, baseY + 1, cz + halfD + 4, MAT_STONE);
+      fillBox(cx - 2, baseY, cz + halfD + 5, cx + 2, baseY,     cz + halfD + 5, MAT_STONE);
+
+      // 2. White plaster walls (hollow box interior)
+      fillBox(cx - halfW, baseY + 2, cz - halfD, cx + halfW, baseY + 1 + wallH, cz + halfD, MAT_WALL);
+      fillBox(cx - halfW + 1, baseY + 2, cz - halfD + 1, cx + halfW - 1, baseY + 1 + wallH, cz + halfD - 1, MAT_DIRT);
+      // Clear actual interior air so windows/door recesses show deep shadow!
+      fillBox(cx - halfW + 1, baseY + 2, cz - halfD + 1, cx + halfW - 1, baseY + 1 + wallH, cz + halfD - 1, MAT_EMPTY);
+
+      // 3. Timber corner posts & horizontal half-timber bands
+      for (const sx of [-halfW, halfW]) {
+        for (const sz of [-halfD, halfD]) {
+          fillBox(cx + sx, baseY + 2, cz + sz, cx + sx, baseY + 1 + wallH, cz + sz, MAT_TRUNK);
+        }
+      }
+      // Mid-wall horizontal timber belt & top beam
+      for (let x = cx - halfW; x <= cx + halfW; x++) {
+        setVox(x, baseY + 5, cz + halfD, MAT_TRUNK);
+        setVox(x, baseY + 5, cz - halfD, MAT_TRUNK);
+        setVox(x, baseY + 1 + wallH, cz + halfD, MAT_TRUNK);
+        setVox(x, baseY + 1 + wallH, cz - halfD, MAT_TRUNK);
+      }
+      for (let z = cz - halfD; z <= cz + halfD; z++) {
+        setVox(cx - halfW, baseY + 5, z, MAT_TRUNK);
+        setVox(cx + halfW, baseY + 5, z, MAT_TRUNK);
+        setVox(cx - halfW, baseY + 1 + wallH, z, MAT_TRUNK);
+        setVox(cx + halfW, baseY + 1 + wallH, z, MAT_TRUNK);
+      }
+      // Vertical mid studs on long walls
+      for (const sx of [-3, 3]) {
+        fillBox(cx + sx, baseY + 5, cz + halfD, cx + sx, baseY + 1 + wallH, cz + halfD, MAT_TRUNK);
+        fillBox(cx + sx, baseY + 5, cz - halfD, cx + sx, baseY + 1 + wallH, cz - halfD, MAT_TRUNK);
+      }
+
+      // 4. Stepped pitched Gable Roof with generous 2-voxel overhangs (ridge runs along X)
+      const roofStartY = baseY + 1 + wallH; // y = 22
+      const peakSpan = halfD + 2; // 9 steps to ridge
+      for (let step = 0; step <= peakSpan; step++) {
+        const y = roofStartY + step;
+        const zMin = cz - (peakSpan - step);
+        const zMax = cz + (peakSpan - step);
+
+        // Fill triangular gable walls in plaster + center timber beam (inset from roof overhang by 2!)
+        if (step > 0 && step < peakSpan) {
+          for (let z = cz - (halfD - step); z <= cz + (halfD - step); z++) {
+            setVox(cx - halfW, y, z, MAT_WALL);
+            setVox(cx + halfW, y, z, MAT_WALL);
+          }
+          // Vertical gable king-post
+          setVox(cx - halfW, y, cz, MAT_TRUNK);
+          setVox(cx + halfW, y, cz, MAT_TRUNK);
+        }
+
+        // Dual terracotta roof slopes with 2-voxel eave overhang on X (-halfW-2 .. +halfW+2)
+        for (let x = cx - halfW - 2; x <= cx + halfW + 2; x++) {
+          setVox(x, y, zMin, MAT_ROOF);
+          setVox(x, y, zMin + 1, MAT_ROOF);
+          setVox(x, y, zMax, MAT_ROOF);
+          setVox(x, y, zMax - 1, MAT_ROOF);
+          // Visible wooden rafter tails tucked under the eaves!
+          if (step === 0) {
+            if ((x - cx) % 4 === 0) {
+              setVox(x, y - 1, zMin, MAT_TRUNK);
+              setVox(x, y - 1, zMax, MAT_TRUNK);
+            }
+          }
+        }
+      }
+      // Ridge cap beam
+      fillBox(cx - halfW - 2, roofStartY + peakSpan, cz, cx + halfW + 2, roofStartY + peakSpan, cz, MAT_ROOF);
+
+      // 5. Front Porch Awning & Pillars (rich overhead occlusion pocket!)
+      const porchY = baseY + 6;
+      // Two timber pillars on porch
+      fillBox(cx - 3, baseY + 2, cz + halfD + 3, cx - 3, porchY - 1, cz + halfD + 3, MAT_TRUNK);
+      fillBox(cx + 3, baseY + 2, cz + halfD + 3, cx + 3, porchY - 1, cz + halfD + 3, MAT_TRUNK);
+      // Sloped porch canopy roof
+      for (let dz = 1; dz <= 4; dz++) {
+        const py = porchY + (dz <= 2 ? 1 : 0);
+        fillBox(cx - 4, py, cz + halfD + dz, cx + 4, py, cz + halfD + dz, MAT_ROOF);
+      }
+      // Small hanging warm lantern under porch
+      setVox(cx + 2, porchY - 1, cz + halfD + 2, MAT_TIMBER);
+      setVox(cx + 2, porchY - 2, cz + halfD + 2, MAT_GLOW);
+
+      // 6. Recessed Doorway & Windows (1 voxel recessed so light/shadow gradients frame them!)
+      // Front Door (centered at cx, cz+halfD)
+      fillBox(cx - 1, baseY + 2, cz + halfD, cx + 1, baseY + 5, cz + halfD, MAT_EMPTY);
+      fillBox(cx - 1, baseY + 2, cz + halfD - 1, cx + 1, baseY + 4, cz + halfD - 1, MAT_TIMBER);
+      setVox(cx, baseY + 5, cz + halfD, MAT_TIMBER); // lintel arch
+
+      // Front flanking windows (cx - 5, cx + 5)
+      for (const wx of [cx - 5, cx + 5]) {
+        fillBox(wx - 1, baseY + 3, cz + halfD, wx + 1, baseY + 4, cz + halfD, MAT_EMPTY);
+        fillBox(wx, baseY + 3, cz + halfD - 1, wx, baseY + 4, cz + halfD - 1, MAT_GLOW);
+        // Shutters & sill
+        setVox(wx - 1, baseY + 3, cz + halfD, MAT_TIMBER);
+        setVox(wx - 1, baseY + 4, cz + halfD, MAT_TIMBER);
+        setVox(wx + 1, baseY + 3, cz + halfD, MAT_TIMBER);
+        setVox(wx + 1, baseY + 4, cz + halfD, MAT_TIMBER);
+        fillBox(wx - 1, baseY + 2, cz + halfD + 1, wx + 1, baseY + 2, cz + halfD + 1, MAT_TIMBER);
+      }
+
+      // West (-X) side windows facing the giant tree (cx - halfW)
+      for (const wz of [cz - 3, cz + 3]) {
+        fillBox(cx - halfW, baseY + 3, wz - 1, cx - halfW, baseY + 4, wz + 1, MAT_EMPTY);
+        fillBox(cx - halfW + 1, baseY + 3, wz, cx - halfW + 1, baseY + 4, wz, MAT_GLOW);
+        setVox(cx - halfW, baseY + 3, wz - 1, MAT_TIMBER);
+        setVox(cx - halfW, baseY + 4, wz - 1, MAT_TIMBER);
+        setVox(cx - halfW, baseY + 3, wz + 1, MAT_TIMBER);
+        setVox(cx - halfW, baseY + 4, wz + 1, MAT_TIMBER);
+        fillBox(cx - halfW - 1, baseY + 2, wz - 1, cx - halfW - 1, baseY + 2, wz + 1, MAT_TIMBER);
+      }
+
+      // 7. Stacked Timber Woodpile tucked right under the west eave overhang!
+      fillBox(cx - halfW - 2, baseY + 2, cz - 1, cx - halfW - 1, baseY + 3, cz + 1, MAT_TIMBER);
+      setVox(cx - halfW - 1, baseY + 4, cz, MAT_TIMBER);
+
+      // 8. Stone Chimney rising up the east/back-east side (cx + halfW - 1, cz - 2)
+      fillBox(cx + halfW - 1, baseY + 1, cz - 3, cx + halfW + 1, roofStartY + peakSpan + 3, cz - 1, MAT_STONE);
+      // Chimney cap flare
+      fillBox(cx + halfW - 2, roofStartY + peakSpan + 3, cz - 4, cx + halfW + 2, roofStartY + peakSpan + 3, cz, MAT_STONE);
+      setVox(cx + halfW, roofStartY + peakSpan + 4, cz - 2, MAT_STONE);
+
+      // 9. Small front fence + meadow path stones + uniform wildflower tufts
+      for (let x = cx - halfW - 3; x <= cx - 5; x++) {
+        const fy = groundY[(cz + halfD + 4) * WX + x];
+        setVox(x, fy + 1, cz + halfD + 4, x % 3 === 0 ? MAT_TRUNK : MAT_TIMBER);
+      }
+      for (let x = cx + 5; x <= cx + halfW + 2; x++) {
+        const fy = groundY[(cz + halfD + 4) * WX + x];
+        setVox(x, fy + 1, cz + halfD + 4, x % 3 === 0 ? MAT_TRUNK : MAT_TIMBER);
+      }
+
+      // Stepping stones curving from cottage front porch toward tree & meadow
+      const pathPts = [
+        [52, 48], [50, 50], [47, 51], [44, 52], [40, 51], [36, 49], [33, 47], [29, 45]
+      ];
+      for (const [px, pz] of pathPts) {
+        for (let ox = 0; ox <= 1; ox++) {
+          for (let oz = 0; oz <= 1; oz++) {
+            const gy = groundY[(pz + oz) * WX + (px + ox)];
+            if (!brookMask[(pz + oz) * WX + (px + ox)]) {
+              setVox(px + ox, gy, pz + oz, MAT_STONE);
+            }
+          }
+        }
+      }
+    }
+
+    // Add companion saplings in far corners (main hero tree uses 100% uniform MAT_LEAF!)
+    function buildSmallSapling(tx, tz, leafMat) {
+      const baseY = groundY[tz * WX + tx];
+      for (let y = 0; y <= 6; y++) setVox(tx, baseY + y, tz, MAT_TRUNK);
+      for (let y = -3; y <= 4; y++) {
+        for (let z = -4; z <= 4; z++) {
+          for (let x = -4; x <= 4; x++) {
+            if ((x * x) / 17 + (y * y) / 13 + (z * z) / 17 <= 1.0) {
+              if (getVox(tx + x, baseY + 7 + y, tz + z) === MAT_EMPTY) {
+                setVox(tx + x, baseY + 7 + y, tz + z, leafMat);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    buildSeedWorldTree(25, 36);
+    buildCottage(53, 35);
+    buildSmallSapling(13, 18, MAT_LEAF_AUTUMN);
+    buildSmallSapling(67, 17, MAT_LEAF_PINE);
+
+    // Subtle uniform flower/shrub dots on open meadow
+    const flowerSpots = [
+      [18, 52, MAT_FLOWER_W], [20, 55, MAT_FLOWER_Y], [35, 58, MAT_FLOWER_W],
+      [38, 61, MAT_FLOWER_Y], [63, 48, MAT_FLOWER_W], [43, 39, MAT_FLOWER_Y],
+      [16, 42, MAT_FLOWER_Y], [66, 43, MAT_FLOWER_W]
+    ];
+    for (const [fx, fz, fm] of flowerSpots) {
+      if (!brookMask[fz * WX + fx]) {
+        const fy = groundY[fz * WX + fx];
+        setVox(fx, fy + 1, fz, fm);
+      }
+    }
+
+    loaderFill.style.width = '55%';
+
+    // =========================================================================
+    // 3. SEEDWORLD GOLDEN SPIRAL 40-RAY SKY OCCLUSION + CORNER SMOOTHING
+    // =========================================================================
+    // Exact 6 face directions matching SeedWorld's ShapeTest.GoldenSpiralPoints(40, side)
+    const DIRS = [
+      { axis: 0, sign: -1, uAxis: 2, vAxis: 1, norm: [-1, 0, 0], uDir: 1,  vDir: 1,  shade: 0.92 }, // -X (Left/West)
+      { axis: 0, sign:  1, uAxis: 2, vAxis: 1, norm: [ 1, 0, 0], uDir: -1, vDir: 1,  shade: 0.92 }, // +X (Right/East)
+      { axis: 2, sign:  1, uAxis: 0, vAxis: 1, norm: [ 0, 0, 1], uDir: 1,  vDir: 1,  shade: 0.88 }, // +Z (Front/South)
+      { axis: 2, sign: -1, uAxis: 0, vAxis: 1, norm: [ 0, 0,-1], uDir: -1, vDir: 1,  shade: 0.88 }, // -Z (Back/North)
+      { axis: 1, sign:  1, uAxis: 0, vAxis: 2, norm: [ 0, 1, 0], uDir: 1,  vDir: -1, shade: 1.00 }, // +Y (Top)
+      { axis: 1, sign: -1, uAxis: 0, vAxis: 2, norm: [ 0,-1, 0], uDir: 1,  vDir: 1,  shade: 0.72 }  // -Y (Bottom)
+    ];
+    const DIMS = [WX, WY, WZ];
+    const AO_FACTORS = [0.46, 0.68, 0.85, 1.0];
+
+    function buildGoldenSpiralRays(N, DISTS, useInvDist) {
+      const inc = Math.PI * (3 - Math.sqrt(5));
+      const spherePts = [];
+      for (let i = 0; i < N; i++) {
+        const y = useInvDist ? (1 - (i + 0.5) * (2 / N)) : (i * (2 / N) - 1 + (1 / N));
+        const r = Math.sqrt(Math.max(0, 1 - y * y));
+        const phi = i * inc;
+        spherePts.push([Math.cos(phi) * r, y, Math.sin(phi) * r]);
+      }
+
+      return DIRS.map(dir => {
+        const [nx, ny, nz] = dir.norm;
+        const pts = spherePts.filter(p => p[0] * nx + p[1] * ny + p[2] * nz > (useInvDist ? 0.22 : 0.2));
+        const count = pts.length;
+        const steps = DISTS.length;
+        const rx = new Float32Array(count * steps);
+        const ry = new Float32Array(count * steps);
+        const rz = new Float32Array(count * steps);
+        const rw = new Float32Array(count * steps);
+        const ux = new Float32Array(count);
+        const uy = new Float32Array(count);
+        const uz = new Float32Array(count);
+        for (let r = 0; r < count; r++) {
+          const [dx, dy, dz] = pts[r];
+          ux[r] = dx; uy[r] = dy; uz[r] = dz;
+          for (let s = 0; s < steps; s++) {
+            const idx = r * steps + s;
+            const d = DISTS[s];
+            rx[idx] = dx * d;
+            ry[idx] = dy * d;
+            rz[idx] = dz * d;
+            rw[idx] = useInvDist ? (1.0 / d) : (1.0 / (1.0 + d * 0.13));
+          }
+        }
+        return {
+          count, steps, rx, ry, rz, rw, ux, uy, uz,
+          stepWeight: useInvDist ? (1.0 / (count * 0.44)) : (1.55 / count)
+        };
+      });
+    }
+    const RAY_SETS = buildGoldenSpiralRays(48, [1.3, 2.3, 3.5, 4.9, 6.5, 8.4, 10.6, 13.0, 15.8, 19.0, 22.5], false);
+    // Exact ray parameters from pagoda-voxel-garden.html (N=34, DISTS=[1.4..10.5], 1/d)
+    const PAGODA_RAY_SETS = buildGoldenSpiralRays(34, [1.4, 2.4, 3.6, 5.0, 6.6, 8.5, 10.5], true);
+
+    function buildSeedWorldMesh() {
+      // Top-down column solid mask (matching SeedWorld lightMask)
+      const topSolidY = new Int16Array(WX * WZ).fill(-1);
+      for (let z = 0; z < WZ; z++) {
+        for (let x = 0; x < WX; x++) {
+          for (let y = WY - 1; y >= 0; y--) {
+            const m = getVox(x, y, z);
+            if (m !== MAT_EMPTY && m !== MAT_GLOW) {
+              topSolidY[z * WX + x] = y;
+              break;
+            }
+          }
+        }
+      }
+
+      const pos = [], norm = [], bentNorm = [], flowMeta = [], colUniform = [], colBiome = [], uv = [];
+      const aFaceSky = [], aSmoothSky = [], aPagodaSky = [], aTopMask = [];
+      const aAO = [], aPagodaAO = [], aFaceShade = [], aMatKind = [];
+      const vertMats = [];
+      const idx = [];
+
+      // Scene-agnostic 3D Environmental Proximity Volumes (half-res 40x28x40):
+      // groundProx: distance falloff upward/outward from any MAT_GRASS voxel (for wall/trunk base moss grounding)
+      // waterProx:  distance falloff outward from any water voxel (for wet/mossy river stones & stream banks)
+      const EX = WX >> 1, EY = WY >> 1, EZ = WZ >> 1;
+      const envTotal = EX * EY * EZ;
+      let groundProxVol = new Float32Array(envTotal);
+      let waterProxVol = new Float32Array(envTotal);
+      for (let gz = 0; gz < WZ; gz++) {
+        for (let gy = 0; gy < WY; gy++) {
+          for (let gx = 0; gx < WX; gx++) {
+            const ei = ((gy >> 1) * EZ + (gz >> 1)) * EX + (gx >> 1);
+            if (grid[(gy * WZ + gz) * WX + gx] === MAT_GRASS) {
+              groundProxVol[ei] = 1.0;
+            }
+            if (gy === WATER_Y && brookMask[gz * WX + gx]) {
+              waterProxVol[ei] = 1.0;
+            }
+          }
+        }
+      }
+      // 6 passes of isotropic 3D distance decay (~10 voxels organic reach)
+      let gpTmp = new Float32Array(envTotal);
+      let wpTmp = new Float32Array(envTotal);
+      const strideYEnv = EX * EZ;
+      for (let pass = 0; pass < 6; pass++) {
+        for (let y = 0; y < EY; y++) {
+          for (let z = 0; z < EZ; z++) {
+            const row = y * strideYEnv + z * EX;
+            for (let x = 0; x < EX; x++) {
+              const i = row + x;
+              let gm = groundProxVol[i], wm = waterProxVol[i];
+              if (x > 0)      { gm = Math.max(gm, groundProxVol[i - 1] * 0.78);          wm = Math.max(wm, waterProxVol[i - 1] * 0.80); }
+              if (x < EX - 1) { gm = Math.max(gm, groundProxVol[i + 1] * 0.78);          wm = Math.max(wm, waterProxVol[i + 1] * 0.80); }
+              if (y > 0)      { gm = Math.max(gm, groundProxVol[i - strideYEnv] * 0.74); wm = Math.max(wm, waterProxVol[i - strideYEnv] * 0.76); }
+              if (y < EY - 1) { gm = Math.max(gm, groundProxVol[i + strideYEnv] * 0.74); wm = Math.max(wm, waterProxVol[i + strideYEnv] * 0.76); }
+              if (z > 0)      { gm = Math.max(gm, groundProxVol[i - EX] * 0.78);         wm = Math.max(wm, waterProxVol[i - EX] * 0.80); }
+              if (z < EZ - 1) { gm = Math.max(gm, groundProxVol[i + EX] * 0.78);         wm = Math.max(wm, waterProxVol[i + EX] * 0.80); }
+              gpTmp[i] = gm;
+              wpTmp[i] = wm;
+            }
+          }
+        }
+        [groundProxVol, gpTmp] = [gpTmp, groundProxVol];
+        [waterProxVol, wpTmp] = [wpTmp, waterProxVol];
+      }
+
+      const sampleEnvProx = (gx, gy, gz) => {
+        const ei = ((gy >> 1) * EZ + (gz >> 1)) * EX + (gx >> 1);
+        return [groundProxVol[ei], waterProxVol[ei]];
+      };
+
+      const isLeafType = (m) => m === MAT_LEAF || m === MAT_LEAF_AUTUMN || m === MAT_LEAF_PINE;
+      function computeLocalElev(gx, gy, gz, mat) {
+        if (mat === MAT_GRASS || mat === MAT_GLOW) return 0.5;
+        let cUp = 0, cDn = 0;
+        const leaf = isLeafType(mat);
+        if (leaf) {
+          for (let dy = 1; dy <= 14; dy++) {
+            if (!isLeafType(getVox(gx, gy + dy, gz))) break;
+            cUp++;
+          }
+          for (let dy = 1; dy <= 14; dy++) {
+            if (!isLeafType(getVox(gx, gy - dy, gz))) break;
+            cDn++;
+          }
+        } else if (mat === MAT_DIRT) {
+          for (let dy = 1; dy <= 14; dy++) {
+            const m = getVox(gx, gy + dy, gz);
+            if (m !== MAT_DIRT && m !== MAT_GRASS) break;
+            cUp++;
+          }
+          for (let dy = 1; dy <= 14; dy++) {
+            if (getVox(gx, gy - dy, gz) === MAT_EMPTY) break;
+            cDn++;
+          }
+        } else {
+          for (let dy = 1; dy <= 14; dy++) {
+            const m = getVox(gx, gy + dy, gz);
+            if (m === MAT_EMPTY) break;
+            cUp++;
+          }
+          for (let dy = 1; dy <= 14; dy++) {
+            const m = getVox(gx, gy - dy, gz);
+            if (m === MAT_EMPTY || m === MAT_GRASS || m === MAT_DIRT) break;
+            cDn++;
+          }
+        }
+        return cDn / Math.max(1, cDn + cUp);
+      }
+
+      const colorTmp = new THREE.Color();
+      const rgbLinear = {};
+      for (const k of Object.keys(PALETTE_HEX)) {
+        colorTmp.setHex(PALETTE_HEX[k]);
+        rgbLinear[k] = [colorTmp.r, colorTmp.g, colorTmp.b];
+      }
+
+      // SeedWorld Biome.cs + Temperate.cs dual-frequency flowing ground gradient + stream humidity tint
+      const biomeCool = new THREE.Color(0x27854b);
+      const biomeMid  = new THREE.Color(0x5ab534);
+      const biomeWarm = new THREE.Color(0xa6da22);
+      const biomeDamp = new THREE.Color(0x2d8d68);
+      const grassLinearGrid = new Float32Array(WX * WZ * 3);
+      for (let gz = 0; gz < WZ; gz++) {
+        for (let gx = 0; gx < WX; gx++) {
+          const n1 = smoothNoise(gx * 0.036 + 11.3, gz * 0.036 + 4.7);
+          const n2 = smoothNoise(gx * 0.021 - 3.1, gz * 0.025 + 8.9);
+          const t = Math.max(0, Math.min(1, 0.5 + (n1 - 0.5) * 1.6 + (n2 - 0.5) * 0.95));
+          if (t < 0.5) {
+            colorTmp.copy(biomeCool).lerp(biomeMid, t * 2.0);
+          } else {
+            colorTmp.copy(biomeMid).lerp(biomeWarm, (t - 0.5) * 2.0);
+          }
+          if (gz > 44) {
+            const curveX = 46 + (79 - gz) * 0.56 + Math.sin(gz * 0.13) * 3.5;
+            const dStream = Math.abs(gx - curveX);
+            const dPond = Math.hypot((gx - 52) * 0.85, (gz - 62) * 0.95);
+            const prox = Math.max(Math.max(0, 1 - dStream / 10.5), Math.max(0, 1 - dPond / 16.5));
+            if (prox > 0) colorTmp.lerp(biomeDamp, Math.pow(prox, 1.3) * 0.62);
+          }
+          const gi = (gz * WX + gx) * 3;
+          grassLinearGrid[gi] = colorTmp.r;
+          grassLinearGrid[gi + 1] = colorTmp.g;
+          grassLinearGrid[gi + 2] = colorTmp.b;
+        }
+      }
+
+      const maxS = Math.max(WX, WY, WZ);
+      const sliceMat = new Uint8Array(maxS * maxS);
+      const sliceVis = new Float32Array(maxS * maxS);
+      const sliceOrigVis = new Float32Array(maxS * maxS);
+      const slicePagodaVis = new Float32Array(maxS * maxS);
+      const sliceBentX = new Float32Array(maxS * maxS);
+      const sliceBentY = new Float32Array(maxS * maxS);
+      const sliceBentZ = new Float32Array(maxS * maxS);
+      const sliceElev = new Float32Array(maxS * maxS);
+      const sliceGndProx = new Float32Array(maxS * maxS);
+      const sliceWatProx = new Float32Array(maxS * maxS);
+
+      const p = [0, 0, 0], n = [0, 0, 0];
+
+      const isSolidAt = (x, y, z) => {
+        const m = getVox(x, y, z);
+        return m !== MAT_EMPTY ? 1 : 0;
+      };
+
+      function cornerAO(x, y, z, axis, sign, uAxis, vAxis, du, dv) {
+        const b = [x, y, z]; b[axis] += sign;
+        const p1 = [b[0], b[1], b[2]]; p1[uAxis] += du;
+        const p2 = [b[0], b[1], b[2]]; p2[vAxis] += dv;
+        const pc = [b[0], b[1], b[2]]; pc[uAxis] += du; pc[vAxis] += dv;
+        const s1 = isSolidAt(p1[0], p1[1], p1[2]);
+        const s2 = isSolidAt(p2[0], p2[1], p2[2]);
+        const c  = isSolidAt(pc[0], pc[1], pc[2]);
+        if (s1 && s2) return 0;
+        return 3 - (s1 + s2 + c); // 0..3 matching Cube.cs GetAmbientOcclusion
+      }
+
+      function computeFaceRayVis(gx, gy, gz, raySet, nx, ny, nz, foliageTrans, applyTopColScale, bentOut) {
+        const ox = gx + 0.5 + nx * 0.55;
+        const oy = gy + 0.5 + ny * 0.55;
+        const oz = gz + 0.5 + nz * 0.55;
+        const { count, steps, rx, ry, rz, rw, ux, uy, uz, stepWeight } = raySet;
+        let occ = 0;
+        let bx = 0, by = 0, bz = 0;
+        for (let r = 0; r < count; r++) {
+          const base = r * steps;
+          let hitClear = 1.0;
+          for (let s = 0; s < steps; s++) {
+            const k = base + s;
+            const sx = (ox + rx[k]) | 0;
+            const sy = (oy + ry[k]) | 0;
+            const sz = (oz + rz[k]) | 0;
+            if (sx < 0 || sx >= WX || sy < 0 || sy >= WY || sz < 0 || sz >= WZ) break;
+            const hit = grid[(sy * WZ + sz) * WX + sx];
+            if (hit !== MAT_EMPTY && hit !== MAT_GLOW) {
+              const isFolHit = hit === MAT_LEAF || hit === MAT_LEAF_AUTUMN || hit === MAT_LEAF_PINE;
+              const weight = isFolHit ? foliageTrans : 1.0;
+              occ += stepWeight * rw[k] * weight;
+              hitClear = Math.max(0.05, 1.0 - rw[k] * weight * 0.85);
+              break;
+            }
+          }
+          if (bentOut) {
+            bx += ux[r] * hitClear;
+            by += uy[r] * hitClear;
+            bz += uz[r] * hitClear;
+          }
+        }
+        if (bentOut) {
+          const len = Math.hypot(bx, by, bz);
+          if (len > 1e-4) {
+            bentOut[0] = bx / len; bentOut[1] = by / len; bentOut[2] = bz / len;
+          } else {
+            bentOut[0] = nx; bentOut[1] = ny; bentOut[2] = nz;
+          }
+        }
+        let vis = Math.max(0.14, Math.min(1.0, 1.0 - occ));
+        if (applyTopColScale && gy < topSolidY[gz * WX + gx]) vis *= 0.88;
+        return vis;
+      }
+
+      let totalFilledVoxels = 0;
+      for (let i = 0; i < grid.length; i++) if (grid[i] !== MAT_EMPTY) totalFilledVoxels++;
+
+      for (let d = 0; d < 6; d++) {
+        const dir = DIRS[d];
+        const raySet = RAY_SETS[d];
+        const pagodaRaySet = PAGODA_RAY_SETS[d];
+        const { axis, sign, uAxis, vAxis, norm: fNorm, shade: dirShade } = dir;
+        const [nx, ny, nz] = fNorm;
+        const dimA = DIMS[axis], dimU = DIMS[uAxis], dimV = DIMS[vAxis];
+
+        for (let slice = 0; slice < dimA; slice++) {
+          sliceMat.fill(MAT_EMPTY);
+          sliceVis.fill(1.0);
+          sliceOrigVis.fill(1.0);
+          slicePagodaVis.fill(1.0);
+          sliceBentX.fill(nx);
+          sliceBentY.fill(ny);
+          sliceBentZ.fill(nz);
+          sliceElev.fill(0.5);
+          sliceGndProx.fill(0.0);
+          sliceWatProx.fill(0.0);
+
+          const tmpBent = [nx, ny, nz];
+          // Pass 1: Exposed faces on this slice + Golden Spiral sky visibility + Bent Normals + Generic Auto Flow
+          for (let v = 0; v < dimV; v++) {
+            for (let u = 0; u < dimU; u++) {
+              p[axis] = slice; p[uAxis] = u; p[vAxis] = v;
+              const mat = getVox(p[0], p[1], p[2]);
+              if (mat === MAT_EMPTY) continue;
+
+              n[0] = p[0]; n[1] = p[1]; n[2] = p[2];
+              n[axis] += sign;
+              if (isSolidAt(n[0], n[1], n[2])) continue;
+
+              const k = v * dimU + u;
+              sliceMat[k] = mat;
+              const [gp, wp] = sampleEnvProx(p[0], p[1], p[2]);
+              sliceElev[k] = computeLocalElev(p[0], p[1], p[2], mat);
+              sliceGndProx[k] = gp;
+              if (isLeafType(mat)) {
+                // MagicaVoxel MATL _media crown thickness (0=thin outer tips -> 1=deep foliage core)
+                let leafDepth = 0;
+                for (let s = 1; s <= 5; s++) {
+                  if (!isLeafType(getVox(p[0] - nx * s, p[1] - ny * s, p[2] - nz * s))) break;
+                  leafDepth++;
+                }
+                let airSides = 0;
+                if (getVox(p[0] + 1, p[1], p[2]) === MAT_EMPTY) airSides++;
+                if (getVox(p[0] - 1, p[1], p[2]) === MAT_EMPTY) airSides++;
+                if (getVox(p[0], p[1] + 1, p[2]) === MAT_EMPTY) airSides++;
+                if (getVox(p[0], p[1] - 1, p[2]) === MAT_EMPTY) airSides++;
+                if (getVox(p[0], p[1], p[2] + 1) === MAT_EMPTY) airSides++;
+                if (getVox(p[0], p[1], p[2] - 1) === MAT_EMPTY) airSides++;
+                sliceWatProx[k] = Math.max(0, Math.min(1, (leafDepth - Math.max(0, airSides - 1) * 0.45) / 4.2));
+              } else {
+                sliceWatProx[k] = wp;
+              }
+              if (mat === MAT_GLOW) {
+                sliceVis[k] = 1.0;
+                sliceOrigVis[k] = 1.0;
+                slicePagodaVis[k] = 1.0;
+                sliceBentX[k] = nx; sliceBentY[k] = ny; sliceBentZ[k] = nz;
+              } else {
+                sliceVis[k] = computeFaceRayVis(p[0], p[1], p[2], raySet, nx, ny, nz, 0.78, false, tmpBent);
+                sliceOrigVis[k] = computeFaceRayVis(p[0], p[1], p[2], raySet, nx, ny, nz, 1.0, false);
+                slicePagodaVis[k] = computeFaceRayVis(p[0], p[1], p[2], pagodaRaySet, nx, ny, nz, 0.55, true);
+                sliceBentX[k] = tmpBent[0]; sliceBentY[k] = tmpBent[1]; sliceBentZ[k] = tmpBent[2];
+              }
+            }
+          }
+
+          // Pass 2: Emit corner-interpolated quads + SeedWorld FixAnisotropy diagonal flip
+          for (let v = 0; v < dimV; v++) {
+            for (let u = 0; u < dimU; u++) {
+              const k = v * dimU + u;
+              const mat = sliceMat[k];
+              if (mat === MAT_EMPTY) continue;
+
+              p[axis] = slice; p[uAxis] = u; p[vAxis] = v;
+              const gx = p[0], gy = p[1], gz = p[2];
+              const isGlow = mat === MAT_GLOW ? 1.0 : 0.0;
+              const isLeafMat = mat === MAT_LEAF || mat === MAT_LEAF_AUTUMN || mat === MAT_LEAF_PINE;
+              const matKind = mat === MAT_GLOW ? 3.0 : (isLeafMat ? 2.0 : (mat === MAT_ROOF ? 1.0 : 0.0));
+              const topBlocked = gy < topSolidY[gz * WX + gx] ? 0.56 : 1.0;
+              const fVisOrig = sliceOrigVis[k];
+
+              const cornerAvg = (arr, du, dv, quantize12) => {
+                if (isGlow > 0.5) return 1.0;
+                let sum = arr[k], cnt = 1;
+                const u2 = u + du, v2 = v + dv;
+                if (u2 >= 0 && u2 < dimU && sliceMat[v * dimU + u2] !== MAT_EMPTY) {
+                  sum += arr[v * dimU + u2]; cnt++;
+                }
+                if (v2 >= 0 && v2 < dimV && sliceMat[v2 * dimU + u] !== MAT_EMPTY) {
+                  sum += arr[v2 * dimU + u]; cnt++;
+                }
+                if (u2 >= 0 && u2 < dimU && v2 >= 0 && v2 < dimV && sliceMat[v2 * dimU + u2] !== MAT_EMPTY) {
+                  sum += arr[v2 * dimU + u2]; cnt++;
+                }
+                const avg = sum / cnt;
+                return quantize12 ? (Math.round(avg * 11) / 11) : avg;
+              };
+
+              // 4 corners raw integer AO (0..3)
+              const aoInt00 = cornerAO(gx, gy, gz, axis, sign, uAxis, vAxis, -1, -1);
+              const aoInt10 = cornerAO(gx, gy, gz, axis, sign, uAxis, vAxis,  1, -1);
+              const aoInt11 = cornerAO(gx, gy, gz, axis, sign, uAxis, vAxis,  1,  1);
+              const aoInt01 = cornerAO(gx, gy, gz, axis, sign, uAxis, vAxis, -1,  1);
+
+              const ao00 = aoInt00 / 3.0, ao10 = aoInt10 / 3.0, ao11 = aoInt11 / 3.0, ao01 = aoInt01 / 3.0;
+              const pao00 = AO_FACTORS[aoInt00], pao10 = AO_FACTORS[aoInt10], pao11 = AO_FACTORS[aoInt11], pao01 = AO_FACTORS[aoInt01];
+
+              const sv00 = cornerAvg(sliceVis, -1, -1, false);
+              const sv10 = cornerAvg(sliceVis,  1, -1, false);
+              const sv11 = cornerAvg(sliceVis,  1,  1, false);
+              const sv01 = cornerAvg(sliceVis, -1,  1, false);
+
+              const pv00 = cornerAvg(slicePagodaVis, -1, -1, true);
+              const pv10 = cornerAvg(slicePagodaVis,  1, -1, true);
+              const pv11 = cornerAvg(slicePagodaVis,  1,  1, true);
+              const pv01 = cornerAvg(slicePagodaVis, -1,  1, true);
+
+              const cornerBent = (du, dv) => {
+                if (isGlow > 0.5) return [nx, ny, nz];
+                const bx = cornerAvg(sliceBentX, du, dv, false);
+                const by = cornerAvg(sliceBentY, du, dv, false);
+                const bz = cornerAvg(sliceBentZ, du, dv, false);
+                const len = Math.hypot(bx, by, bz) || 1.0;
+                return [bx / len, by / len, bz / len];
+              };
+              const bn00 = cornerBent(-1, -1);
+              const bn10 = cornerBent( 1, -1);
+              const bn11 = cornerBent( 1,  1);
+              const bn01 = cornerBent(-1,  1);
+
+              const cornerAvgSame = (arr, du, dv) => {
+                let sum = arr[k], cnt = 1;
+                const u2 = u + du, v2 = v + dv;
+                if (u2 >= 0 && u2 < dimU && sliceMat[v * dimU + u2] === mat) { sum += arr[v * dimU + u2]; cnt++; }
+                if (v2 >= 0 && v2 < dimV && sliceMat[v2 * dimU + u] === mat) { sum += arr[v2 * dimU + u]; cnt++; }
+                if (u2 >= 0 && u2 < dimU && v2 >= 0 && v2 < dimV && sliceMat[v2 * dimU + u2] === mat) { sum += arr[v2 * dimU + u2]; cnt++; }
+                return sum / cnt;
+              };
+              const el00 = cornerAvgSame(sliceElev, -1, -1), el10 = cornerAvgSame(sliceElev, 1, -1);
+              const el11 = cornerAvgSame(sliceElev,  1,  1), el01 = cornerAvgSame(sliceElev, -1, 1);
+              const gp00 = cornerAvg(sliceGndProx, -1, -1, false), gp10 = cornerAvg(sliceGndProx, 1, -1, false);
+              const gp11 = cornerAvg(sliceGndProx,  1,  1, false), gp01 = cornerAvg(sliceGndProx, -1, 1, false);
+              const wp00 = cornerAvg(sliceWatProx, -1, -1, false), wp10 = cornerAvg(sliceWatProx, 1, -1, false);
+              const wp11 = cornerAvg(sliceWatProx,  1,  1, false), wp01 = cornerAvg(sliceWatProx, -1, 1, false);
+              const flowMatId = isLeafMat ? 1.0
+                              : (mat === MAT_TRUNK || mat === MAT_TIMBER) ? 2.0
+                              : (mat === MAT_WALL) ? 3.0
+                              : (mat === MAT_ROOF) ? 4.0
+                              : (mat === MAT_STONE) ? 5.0
+                              : (mat === MAT_DIRT) ? 6.0
+                              : (mat === MAT_FLOWER_W || mat === MAT_FLOWER_Y) ? 7.0
+                              : (mat === MAT_GLOW) ? 8.0 : 0.0;
+
+              const [cr, cg, cb] = rgbLinear[mat];
+
+              const makeVert = (du, dv) => {
+                const vp = [p[0] - WX / 2, p[1], p[2] - WZ / 2];
+                vp[axis] += sign > 0 ? 1 : 0;
+                vp[uAxis] += du;
+                vp[vAxis] += dv;
+                return vp;
+              };
+              const c00 = makeVert(0, 0);
+              const c10 = makeVert(1, 0);
+              const c11 = makeVert(1, 1);
+              const c01 = makeVert(0, 1);
+
+              const e1 = [c10[0] - c00[0], c10[1] - c00[1], c10[2] - c00[2]];
+              const e2 = [c11[0] - c00[0], c11[1] - c00[1], c11[2] - c00[2]];
+              const cxProd = e1[1] * e2[2] - e1[2] * e2[1];
+              const cyProd = e1[2] * e2[0] - e1[0] * e2[2];
+              const czProd = e1[0] * e2[1] - e1[1] * e2[0];
+              const frontFacing = (cxProd * nx + cyProd * ny + czProd * nz) > 0;
+
+              const baseVert = pos.length / 3;
+              const quadVerts = [
+                { p: c00, u: 0, v: 0, ao: ao00, pao: pao00, sv: sv00, pv: pv00, bn: bn00, el: el00, gp: gp00, wp: wp00 },
+                { p: c10, u: 1, v: 0, ao: ao10, pao: pao10, sv: sv10, pv: pv10, bn: bn10, el: el10, gp: gp10, wp: wp10 },
+                { p: c11, u: 1, v: 1, ao: ao11, pao: pao11, sv: sv11, pv: pv11, bn: bn11, el: el11, gp: gp11, wp: wp11 },
+                { p: c01, u: 0, v: 1, ao: ao01, pao: pao01, sv: sv01, pv: pv01, bn: bn01, el: el01, gp: gp01, wp: wp01 },
+              ];
+
+              for (const qv of quadVerts) {
+                pos.push(qv.p[0], qv.p[1], qv.p[2]);
+                norm.push(nx, ny, nz);
+                bentNorm.push(qv.bn[0], qv.bn[1], qv.bn[2]);
+                flowMeta.push(flowMatId, qv.el, qv.gp, qv.wp);
+                // Uniform buffer: strictly 1 fixed hex per material (companion leaves match MAT_LEAF)
+                const [ur, ug, ub] = isLeafMat ? rgbLinear[MAT_LEAF] : [cr, cg, cb];
+                colUniform.push(ur, ug, ub);
+                // Biome Flow buffer: smooth flowing ground gradient per corner + species colors
+                if (mat === MAT_GRASS) {
+                  const vx = Math.max(0, Math.min(WX - 1, Math.round(qv.p[0] + WX / 2)));
+                  const vz = Math.max(0, Math.min(WZ - 1, Math.round(qv.p[2] + WZ / 2)));
+                  const gi = (vz * WX + vx) * 3;
+                  colBiome.push(grassLinearGrid[gi], grassLinearGrid[gi + 1], grassLinearGrid[gi + 2]);
+                } else {
+                  colBiome.push(cr, cg, cb);
+                }
+                uv.push(qv.u, qv.v);
+                aFaceSky.push(fVisOrig);
+                aSmoothSky.push(qv.sv);
+                aPagodaSky.push(qv.pv);
+                aTopMask.push(topBlocked);
+                aAO.push(qv.ao);
+                aPagodaAO.push(qv.pao);
+                aFaceShade.push(dirShade);
+                aMatKind.push(matKind);
+                vertMats.push(mat);
+              }
+
+              // SeedWorld FixAnisotropy diagonal selection for smooth interpolation symmetry
+              const diagA = (ao00 + ao11) + (sv00 + sv11) * 2.0;
+              const diagB = (ao10 + ao01) + (sv10 + sv01) * 2.0;
+              const flipDiag = diagA < diagB;
+
+              if (frontFacing) {
+                if (!flipDiag) {
+                  idx.push(baseVert, baseVert + 1, baseVert + 2, baseVert, baseVert + 2, baseVert + 3);
+                } else {
+                  idx.push(baseVert + 1, baseVert + 2, baseVert + 3, baseVert + 1, baseVert + 3, baseVert);
+                }
+              } else {
+                if (!flipDiag) {
+                  idx.push(baseVert, baseVert + 2, baseVert + 1, baseVert, baseVert + 3, baseVert + 2);
+                } else {
+                  idx.push(baseVert + 1, baseVert + 3, baseVert + 2, baseVert + 1, baseVert, baseVert + 3);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const colUniformArr = new Float32Array(colUniform);
+      const colBiomeArr = new Float32Array(colBiome);
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+      geo.setAttribute('aBentNorm', new THREE.Float32BufferAttribute(bentNorm, 3));
+      geo.setAttribute('aFlowMeta', new THREE.Float32BufferAttribute(flowMeta, 4));
+      // Start with flowing SeedWorld Biome colors active (1-click toggleable to pure colUniformArr!)
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(colBiomeArr), 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setAttribute('aFaceSky', new THREE.Float32BufferAttribute(aFaceSky, 1));
+      geo.setAttribute('aSmoothSky', new THREE.Float32BufferAttribute(aSmoothSky, 1));
+      geo.setAttribute('aPagodaSky', new THREE.Float32BufferAttribute(aPagodaSky, 1));
+      geo.setAttribute('aTopMask', new THREE.Float32BufferAttribute(aTopMask, 1));
+      geo.setAttribute('aAO', new THREE.Float32BufferAttribute(aAO, 1));
+      geo.setAttribute('aPagodaAO', new THREE.Float32BufferAttribute(aPagodaAO, 1));
+      geo.setAttribute('aFaceShade', new THREE.Float32BufferAttribute(aFaceShade, 1));
+      geo.setAttribute('aMatKind', new THREE.Float32BufferAttribute(aMatKind, 1));
+      geo.setIndex(idx);
+      geo.computeBoundingSphere();
+
+      return { geo, vertMats, colUniformArr, colBiomeArr, totalFilledVoxels, triCount: idx.length / 3 };
+    }
+
+    const meshInfo = buildSeedWorldMesh();
+    loaderFill.style.width = '84%';
+
+    // 3D Flood-Fill Color Bleeding Volume (half-res 40x28x40: RGB = Chromatic Albedo Bounce, A = Window/Lantern Warmth)
+    function createColorBleed3DTexture() {
+      const BX = WX >> 1, BY = WY >> 1, BZ = WZ >> 1;
+      const total = BX * BY * BZ;
+      const solidWall = new Uint8Array(total);
+      let srcR = new Float32Array(total);
+      let srcG = new Float32Array(total);
+      let srcB = new Float32Array(total);
+      let srcE = new Float32Array(total);
+
+      // Compute bounce colors directly from world grid
+      const bounceMap = {
+        [MAT_GRASS]:       [0.34, 0.86, 0.20],
+        [MAT_LEAF]:        [0.48, 0.90, 0.16],
+        [MAT_LEAF_AUTUMN]: [1.05, 0.42, 0.12],
+        [MAT_LEAF_PINE]:   [0.18, 0.68, 0.36],
+        [MAT_ROOF]:        [0.95, 0.34, 0.18],
+        [MAT_WALL]:        [0.88, 0.80, 0.66],
+        [MAT_TRUNK]:       [0.42, 0.24, 0.12],
+        [MAT_TIMBER]:      [0.48, 0.28, 0.14],
+        [MAT_FLOWER_Y]:    [0.95, 0.78, 0.22],
+        [MAT_FLOWER_W]:    [0.82, 0.80, 0.74],
+        [MAT_STONE]:       [0.16, 0.17, 0.18],
+        [MAT_DIRT]:        [0.18, 0.13, 0.10]
+      };
+
+      const occCnt = new Uint8Array(total);
+      for (let gz = 0; gz < WZ; gz++) {
+        for (let gy = 0; gy < WY; gy++) {
+          for (let gx = 0; gx < WX; gx++) {
+            const mat = getVox(gx, gy, gz);
+            // Data3DTexture memory layout: (z * height + y) * width + x => (bz * BY + by) * BX + bx
+            const bi = ((gz >> 1) * BY + (gy >> 1)) * BX + (gx >> 1);
+            if (mat !== MAT_EMPTY) {
+              occCnt[bi]++;
+              if (mat === MAT_GLOW) {
+                srcE[bi] = Math.max(srcE[bi], 1.25);
+                const nb = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+                for (let d = 0; d < 6; d++) {
+                  const nx = (gx >> 1) + nb[d][0], ny = (gy >> 1) + nb[d][1], nz = (gz >> 1) + nb[d][2];
+                  if (nx >= 0 && nx < BX && ny >= 0 && ny < BY && nz >= 0 && nz < BZ) {
+                    const ni = (nz * BY + ny) * BX + nx;
+                    srcE[ni] = Math.max(srcE[ni], 1.0);
+                  }
+                }
+              } else if (bounceMap[mat]) {
+                const airAbove = getVox(gx, gy + 1, gz) === MAT_EMPTY;
+                const airEast = getVox(gx + 1, gy, gz) === MAT_EMPTY;
+                const airSouth = getVox(gx, gy, gz + 1) === MAT_EMPTY;
+                if (airAbove || airEast || airSouth || getVox(gx - 1, gy, gz) === MAT_EMPTY || getVox(gx, gy, gz - 1) === MAT_EMPTY) {
+                  const expW = airAbove ? 0.34 : (airEast || airSouth ? 0.24 : 0.12);
+                  const c = bounceMap[mat];
+                  const nb = [[0,1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,-1,0]];
+                  for (let d = 0; d < 6; d++) {
+                    const ax = gx + nb[d][0], ay = gy + nb[d][1], az = gz + nb[d][2];
+                    if (inBounds(ax, ay, az) && getVox(ax, ay, az) === MAT_EMPTY) {
+                      const ai = ((az >> 1) * BY + (ay >> 1)) * BX + (ax >> 1);
+                      srcR[ai] += c[0] * expW;
+                      srcG[ai] += c[1] * expW;
+                      srcB[ai] += c[2] * expW;
+                    }
+                  }
+                }
+              }
+            } else if (gy === WATER_Y && brookMask[gz * WX + gx]) {
+              srcR[bi] += 0.14 * 0.38;
+              srcG[bi] += 0.60 * 0.38;
+              srcB[bi] += 0.90 * 0.38;
+            }
+          }
+        }
+      }
+
+      for (let i = 0; i < total; i++) {
+        solidWall[i] = occCnt[i] >= 6 ? 1 : 0;
+        srcR[i] = Math.min(1.4, srcR[i]);
+        srcG[i] = Math.min(1.4, srcG[i]);
+        srcB[i] = Math.min(1.4, srcB[i]);
+      }
+
+      // 6 passes of 3D flood-fill diffusion through air cells
+      let dstR = new Float32Array(total), dstG = new Float32Array(total);
+      let dstB = new Float32Array(total), dstE = new Float32Array(total);
+      const strideZ = BX * BY;
+
+      for (let pass = 0; pass < 6; pass++) {
+        for (let z = 0; z < BZ; z++) {
+          for (let y = 0; y < BY; y++) {
+            const row = (z * BY + y) * BX;
+            for (let x = 0; x < BX; x++) {
+              const i = row + x;
+              if (solidWall[i]) {
+                dstR[i] = srcR[i]; dstG[i] = srcG[i]; dstB[i] = srcB[i]; dstE[i] = srcE[i];
+                continue;
+              }
+              let sr = srcR[i], sg = srcG[i], sb = srcB[i], se = srcE[i], cnt = 1.0;
+              const checkNb = (ni) => {
+                if (solidWall[ni]) return;
+                sr += srcR[ni]; sg += srcG[ni]; sb += srcB[ni]; se += srcE[ni];
+                cnt += 1.0;
+              };
+              if (x > 0) checkNb(i - 1);
+              if (x < BX - 1) checkNb(i + 1);
+              if (y > 0) checkNb(i - BX);
+              if (y < BY - 1) checkNb(i + BX);
+              if (z > 0) checkNb(i - strideZ);
+              if (z < BZ - 1) checkNb(i + strideZ);
+              const inv = 0.89 / cnt;
+              dstR[i] = Math.max(srcR[i] * 0.55, sr * inv);
+              dstG[i] = Math.max(srcG[i] * 0.55, sg * inv);
+              dstB[i] = Math.max(srcB[i] * 0.55, sb * inv);
+              dstE[i] = Math.max(srcE[i] * 0.62, se * (0.87 / cnt));
+            }
+          }
+        }
+        [srcR, dstR] = [dstR, srcR];
+        [srcG, dstG] = [dstG, srcG];
+        [srcB, dstB] = [dstB, srcB];
+        [srcE, dstE] = [dstE, srcE];
+      }
+
+      const rgba = new Uint8Array(total * 4);
+      for (let i = 0; i < total; i++) {
+        const j = i * 4;
+        rgba[j]     = Math.min(255, Math.round((srcR[i] / 1.4) * 255));
+        rgba[j + 1] = Math.min(255, Math.round((srcG[i] / 1.4) * 255));
+        rgba[j + 2] = Math.min(255, Math.round((srcB[i] / 1.4) * 255));
+        rgba[j + 3] = Math.min(255, Math.round(Math.min(1.0, srcE[i]) * 255));
+      }
+
+      const tex3D = new THREE.Data3DTexture(rgba, BX, BY, BZ);
+      tex3D.format = THREE.RGBAFormat;
+      tex3D.type = THREE.UnsignedByteType;
+      tex3D.minFilter = THREE.LinearFilter;
+      tex3D.magFilter = THREE.LinearFilter;
+      tex3D.wrapS = THREE.ClampToEdgeWrapping;
+      tex3D.wrapT = THREE.ClampToEdgeWrapping;
+      tex3D.wrapR = THREE.ClampToEdgeWrapping;
+      tex3D.unpackAlignment = 1;
+      tex3D.generateMipmaps = false;
+      tex3D.needsUpdate = true;
+      return tex3D;
+    }
+
+    const bleedTex3D = createColorBleed3DTexture();
+    loaderFill.style.width = '90%';
+
+    // =========================================================================
+    // 4. THREE.JS SCENE, SKY DOME, SHARED UNIFORMS & MULTI-MODE SHADER
+    // =========================================================================
+    const container = document.getElementById('canvas-wrap');
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.04;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    // Exponential atmospheric fog (density = 0.0 when toggle OFF -> zero shader recompilation overhead)
+    scene.fog = new THREE.FogExp2(0xd8ecfb, 0.0);
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.4, 500);
+    camera.position.set(50, 41, 66);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 16, 4);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 12;
+    controls.maxDistance = 135;
+    controls.maxPolarAngle = Math.PI * 0.49;
+    controls.update();
+
+    const sharedUniforms = {
+      uMode:          { value: 5 },       // 0=Flat, 1=Basic, 2=SeedWorld Original, 3=Soft 22.5m GI, 4=Pagoda 10.5m GI, 5=Vivid Hue-Shift
+      uObjFlowMode:   { value: 3 },       // 0=Off, 1=3D Continuous Flow, 2=Height+Ground/Water Anchor, 3=Hybrid Auto Flow
+      uObjFlowStr:    { value: 0.78 },    // 0.0..1.5 adjustable strength
+      uBentNormal:    { value: 1.0 },     // 1=3D Bent Normal curvature smoothing across faces
+      uColorBleed:    { value: 1.0 },     // 1=3D flood-fill chromatic bounce & lantern glow
+      uNormalBevel:   { value: 1.0 },     // 1=MagicaVoxel GGX chamfer catchlight bevel
+      uSSS:           { value: 1.0 },     // 1=MagicaVoxel _media Beer-Lambert canopy thickness SSS + Rim
+      uWaterRefr:     { value: 1.0 },     // 1=MagicaVoxel _glass depth-tinted clear brook + caustics
+      uBleedTex:      { value: bleedTex3D },
+      uVolMin:        { value: new THREE.Vector3(-WX * 0.5, 0.0, -WZ * 0.5) },
+      uVolSize:       { value: new THREE.Vector3(WX, WY, WZ) },
+      uSeamStr:       { value: 0.0 },     // 0=seamless, 1=dark voxel grid outline
+      uPbrSplit:      { value: 0.0 },     // 0=uniform matte, 1=Matte/Glazed/Foliage/Glow PBR split
+      uDirAO:         { value: 0.0 },     // 0=pure lighting, 1=6-dir shade + strong AO_FACTORS [0.46..1.0]
+      uBloomGlow:     { value: 0.0 },     // 1 when HDR Bloom + warm point lights active
+      uSkyAmbMult:    { value: 0.58 },
+      uSunGlowStr:    { value: 0.24 },
+      uTime:          { value: 0.0 },
+      uTopColor:      { value: new THREE.Color(0x2e78db) },
+      uMidColor:      { value: new THREE.Color(0x7bc7f5) },
+      uHorizonColor:  { value: new THREE.Color(0xddeffb) },
+      uGroundBounce:  { value: new THREE.Color(0x4b6b42) },
+      uSunDir:        { value: new THREE.Vector3(0.6, 0.65, 0.45).normalize() },
+      uSunColor:      { value: new THREE.Color(0xfff1d6) },
+      uSunIntensity:  { value: 1.45 },
+      uGlowBoost:     { value: 0.15 }
+    };
+
+    // SkyDome matching SeedWorld Skydome.cs + smooth 3-band atmospheric gradient (exempt from scene fog)
+    const skyDome = new THREE.Mesh(
+      new THREE.SphereGeometry(280, 32, 20),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        fog: false,
+        uniforms: {
+          uTopColor:     sharedUniforms.uTopColor,
+          uMidColor:     sharedUniforms.uMidColor,
+          uHorizonColor: sharedUniforms.uHorizonColor,
+          uSunDir:       sharedUniforms.uSunDir,
+          uSunColor:     sharedUniforms.uSunColor,
+          uSunGlowStr:   sharedUniforms.uSunGlowStr
+        },
+        vertexShader: `
+          varying vec3 vDir;
+          void main() {
+            vDir = normalize(position);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uTopColor;
+          uniform vec3 uMidColor;
+          uniform vec3 uHorizonColor;
+          uniform vec3 uSunDir;
+          uniform vec3 uSunColor;
+          uniform float uSunGlowStr;
+          varying vec3 vDir;
+          void main() {
+            vec3 d = normalize(vDir);
+            float h = clamp(d.y, -0.25, 1.0);
+            vec3 sky = mix(uHorizonColor, uMidColor, smoothstep(-0.05, 0.25, h));
+            sky = mix(sky, uTopColor, smoothstep(0.22, 0.85, h));
+            float sunDot = max(dot(d, normalize(uSunDir)), 0.0);
+            sky += uSunColor * (pow(sunDot, 12.0) * 0.28 + pow(sunDot, 64.0) * 0.45) * (0.45 + uSunGlowStr);
+            sky = min(sky, vec3(0.96));
+            gl_FragColor = vec4(sky, 1.0);
+          }
+        `
+      })
+    );
+    scene.add(skyDome);
+
+    // Sun DirectionalLight (PCFSoftShadowMap enabled/disabled cleanly via toggle)
+    const sunLight = new THREE.DirectionalLight(0xfff0d4, 1.45);
+    sunLight.position.set(42, 46, 32);
+    sunLight.castShadow = false; // Default OFF — pure SeedWorld rendering without ShadowMap!
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -52;
+    sunLight.shadow.camera.right = 52;
+    sunLight.shadow.camera.top = 52;
+    sunLight.shadow.camera.bottom = -52;
+    sunLight.shadow.camera.near = 5;
+    sunLight.shadow.camera.far = 160;
+    sunLight.shadow.bias = -0.0005;
+    sunLight.shadow.normalBias = 0.04;
+    scene.add(sunLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x8ec8f8, 0x4b6340, 0.68);
+    scene.add(hemiLight);
+
+    // Warm localized accent lights at Cottage front porch lantern & west window (off unless Bloom&WarmLights ON)
+    const accentLights = [
+      new THREE.PointLight(0xffb74d, 0, 34, 1.45), // Porch hanging lantern
+      new THREE.PointLight(0xff9e5e, 0, 26, 1.55)  // West window spill over woodpile
+    ];
+    accentLights[0].position.set(15.5, 16.5, 4.5);
+    accentLights[1].position.set(3.5, 15.8, -5.0);
+    accentLights.forEach(l => scene.add(l));
+
+    // Post-processing Composer: Render -> Optional Bloom -> Optional Miniature Tilt-Shift DoF -> ACES Output
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.34, // strength
+      0.42, // radius
+      1.08  // threshold
+    );
+    bloomPass.enabled = false;
+    composer.addPass(bloomPass);
+
+    const dofPass = new ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        uTexel:   { value: new THREE.Vector2(1 / window.innerWidth, 1 / window.innerHeight) }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 uTexel;
+        varying vec2 vUv;
+        void main() {
+          float tilt = (vUv.y - 0.50) + (vUv.x - 0.50) * 0.12;
+          float blurAmt = smoothstep(0.16, 0.46, abs(tilt));
+          vec4 center = texture2D(tDiffuse, vUv);
+          if (blurAmt < 0.01) {
+            gl_FragColor = center;
+            return;
+          }
+          float rad = blurAmt * 2.35;
+          vec3 acc = center.rgb;
+          float totalW = 1.0;
+          // 12-tap Golden Angle miniature bokeh disc
+          float ang = 0.0;
+          for (int i = 0; i < 12; i++) {
+            float fi = float(i);
+            float rScale = sqrt((fi + 0.5) / 12.0) * rad;
+            vec2 off = vec2(cos(ang), sin(ang)) * uTexel * rScale;
+            acc += texture2D(tDiffuse, clamp(vUv + off, vec2(0.002), vec2(0.998))).rgb;
+            totalW += 1.0;
+            ang += 2.39996323;
+          }
+          vec3 col = acc / totalW;
+          // Gentle miniature vignette framing at blurred corners
+          float vig = 1.0 - smoothstep(0.45, 0.95, length(vUv - 0.5)) * 0.08 * blurAmt;
+          gl_FragColor = vec4(col * vig, center.a);
+        }
+      `
+    });
+    dofPass.enabled = true;
+    composer.addPass(dofPass);
+    composer.addPass(new OutputPass());
+
+    // Custom Composable Voxel Material supporting Mode 0..4 + PBR Split + Bevels + DirAO
+    const voxelMat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.90,
+      metalness: 0.0
+    });
+
+    voxelMat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, {
+        uMode:         sharedUniforms.uMode,
+        uObjFlowMode:  sharedUniforms.uObjFlowMode,
+        uObjFlowStr:   sharedUniforms.uObjFlowStr,
+        uBentNormal:   sharedUniforms.uBentNormal,
+        uColorBleed:   sharedUniforms.uColorBleed,
+        uNormalBevel:  sharedUniforms.uNormalBevel,
+        uSSS:          sharedUniforms.uSSS,
+        uBleedTex:     sharedUniforms.uBleedTex,
+        uVolMin:       sharedUniforms.uVolMin,
+        uVolSize:      sharedUniforms.uVolSize,
+        uSeamStr:      sharedUniforms.uSeamStr,
+        uPbrSplit:     sharedUniforms.uPbrSplit,
+        uDirAO:        sharedUniforms.uDirAO,
+        uBloomGlow:    sharedUniforms.uBloomGlow,
+        uSkyAmbMult:   sharedUniforms.uSkyAmbMult,
+        uSunGlowStr:   sharedUniforms.uSunGlowStr,
+        uTopColor:     sharedUniforms.uTopColor,
+        uMidColor:     sharedUniforms.uMidColor,
+        uHorizonColor: sharedUniforms.uHorizonColor,
+        uGroundBounce: sharedUniforms.uGroundBounce,
+        uSunDir:       sharedUniforms.uSunDir,
+        uSunColor:     sharedUniforms.uSunColor,
+        uSunIntensity: sharedUniforms.uSunIntensity,
+        uGlowBoost:    sharedUniforms.uGlowBoost
+      });
+
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>
+          attribute vec3 aBentNorm;
+          attribute vec4 aFlowMeta;
+          attribute float aFaceSky;
+          attribute float aSmoothSky;
+          attribute float aPagodaSky;
+          attribute float aTopMask;
+          attribute float aAO;
+          attribute float aPagodaAO;
+          attribute float aFaceShade;
+          attribute float aMatKind;
+          varying vec3 vBentNorm;
+          varying vec3 vViewBentNorm;
+          varying vec4 vFlowMeta;
+          varying vec3 vWorldPos;
+          varying vec3 vWorldTangU;
+          varying vec3 vWorldTangV;
+          varying vec3 vViewTangU;
+          varying vec3 vViewTangV;
+          varying float vFaceSky;
+          varying float vSmoothSky;
+          varying float vPagodaSky;
+          varying float vTopMask;
+          varying float vAO;
+          varying float vPagodaAO;
+          varying float vFaceShade;
+          varying float vMatKind;
+          varying vec3 vWorldNormal;
+          varying vec2 vVoxUv;
+          varying float vDist;
+        `)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          vFaceSky = aFaceSky;
+          vSmoothSky = aSmoothSky;
+          vPagodaSky = aPagodaSky;
+          vTopMask = aTopMask;
+          vAO = aAO;
+          vPagodaAO = aPagodaAO;
+          vFaceShade = aFaceShade;
+          vMatKind = aMatKind;
+          vWorldNormal = normalize(normal);
+          vBentNorm = normalize(aBentNorm);
+          vFlowMeta = aFlowMeta;
+          vViewBentNorm = normalize(normalMatrix * normalize(aBentNorm));
+          vec3 tU = abs(normal.x) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+          vec3 tV = abs(normal.y) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+          vWorldTangU = tU;
+          vWorldTangV = tV;
+          vViewTangU = normalize(normalMatrix * tU);
+          vViewTangV = normalize(normalMatrix * tV);
+          vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vVoxUv = uv;
+          vec4 mv = modelViewMatrix * vec4(transformed, 1.0);
+          vDist = -mv.z;
+        `);
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+          uniform float uMode;
+          uniform float uObjFlowMode;
+          uniform float uObjFlowStr;
+          uniform float uBentNormal;
+          uniform float uColorBleed;
+          uniform float uNormalBevel;
+          uniform float uSSS;
+          uniform highp sampler3D uBleedTex;
+          uniform vec3 uVolMin;
+          uniform vec3 uVolSize;
+          uniform float uSeamStr;
+          uniform float uPbrSplit;
+          uniform float uDirAO;
+          uniform float uBloomGlow;
+          uniform float uSkyAmbMult;
+          uniform float uSunGlowStr;
+          uniform vec3 uTopColor;
+          uniform vec3 uMidColor;
+          uniform vec3 uHorizonColor;
+          uniform vec3 uGroundBounce;
+          uniform vec3 uSunDir;
+          uniform vec3 uSunColor;
+          uniform float uSunIntensity;
+          uniform float uGlowBoost;
+          varying vec3 vBentNorm;
+          varying vec3 vViewBentNorm;
+          varying vec4 vFlowMeta;
+          varying vec3 vWorldPos;
+          varying vec3 vWorldTangU;
+          varying vec3 vWorldTangV;
+          varying vec3 vViewTangU;
+          varying vec3 vViewTangV;
+          varying float vFaceSky;
+          varying float vSmoothSky;
+          varying float vPagodaSky;
+          varying float vTopMask;
+          varying float vAO;
+          varying float vPagodaAO;
+          varying float vFaceShade;
+          varying float vMatKind;
+          varying vec3 vWorldNormal;
+          varying vec2 vVoxUv;
+          varying float vDist;
+          float flowHash3(vec3 p) {
+            p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+            p += dot(p, p.yxz + 33.33);
+            return fract((p.x + p.y) * p.z);
+          }
+          float smoothNoise3D(vec3 p) {
+            vec3 i = floor(p);
+            vec3 f = fract(p);
+            vec3 u = f * f * (3.0 - 2.0 * f);
+            float n000 = flowHash3(i);
+            float n100 = flowHash3(i + vec3(1.0, 0.0, 0.0));
+            float n010 = flowHash3(i + vec3(0.0, 1.0, 0.0));
+            float n110 = flowHash3(i + vec3(1.0, 1.0, 0.0));
+            float n001 = flowHash3(i + vec3(0.0, 0.0, 1.0));
+            float n101 = flowHash3(i + vec3(1.0, 0.0, 1.0));
+            float n011 = flowHash3(i + vec3(0.0, 1.0, 1.0));
+            float n111 = flowHash3(i + vec3(1.0, 1.0, 1.0));
+            return mix(
+              mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),
+              mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),
+              u.z
+            );
+          }
+          float fbmFlow3D(vec3 p) {
+            float n1 = smoothNoise3D(p * 0.072 + vec3(3.1, 1.7, 5.9));
+            float n2 = smoothNoise3D(p * 0.155 - vec3(4.3, 2.8, 1.4));
+            return clamp(0.5 + ((n1 * 0.68 + n2 * 0.32) - 0.5) * 2.25, 0.0, 1.0);
+          }
+          // Rodrigues Hue Rotation preserving luma across low-channel saturated colors (e.g. #82c928)
+          vec3 hueShiftColor(vec3 col, float rad) {
+            vec3 k = vec3(0.577350269);
+            float cosA = cos(rad);
+            float sinA = sin(rad);
+            return max(vec3(0.0), col * cosA + cross(k, col) * sinA + k * dot(k, col) * (1.0 - cosA));
+          }
+        `)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          if (uMode > 0.5 && uObjFlowMode > 0.5 && uObjFlowStr > 0.01) {
+            float fMat = vFlowMeta.x;
+            if (fMat >= 0.5 && fMat < 7.5) {
+              float localElev = vFlowMeta.y;
+              float gndProx = vFlowMeta.z;
+              float watProx = vFlowMeta.w;
+              float n3 = (abs(fMat - 6.0) < 0.3)
+                ? fbmFlow3D(vWorldPos * vec3(0.45, 3.20, 0.45))
+                : fbmFlow3D(vWorldPos);
+              float tFlow = (uObjFlowMode < 1.5) ? n3
+                          : ((uObjFlowMode < 2.5) ? localElev : mix(n3, localElev, 0.48));
+              float envWeight = (uObjFlowMode < 1.5) ? 0.0
+                              : ((uObjFlowMode < 2.5) ? 1.0 : 0.90);
+              float signedT = (tFlow - 0.5) * 2.0; // -1.0 (cool/bottom) .. +1.0 (warm/top)
+              float sPow = clamp(uObjFlowStr, 0.0, 1.5);
+              vec3 flowed = diffuseColor.rgb;
+
+              if (fMat < 1.5) { // Foliage: Golden chartreuse sunlit tips <-> Lush cool teal-emerald
+                float hueRad = mix(0.68, -0.38, tFlow) * min(1.25, sPow);
+                vec3 hCol = hueShiftColor(flowed, hueRad);
+                float lumScale = mix(0.84, 1.15, tFlow);
+                flowed = mix(flowed, hCol * lumScale, clamp(sPow * 0.92, 0.0, 1.0));
+              } else if (fMat < 2.5) { // Trunk & Timber: Weathered cool walnut <-> Warm honey cedar
+                float hueRad = mix(0.22, -0.18, tFlow) * min(1.2, sPow);
+                vec3 hCol = hueShiftColor(flowed, hueRad) * mix(vec3(0.76, 0.80, 0.88), vec3(1.24, 1.08, 0.84), tFlow);
+                flowed = mix(flowed, hCol, clamp(sPow * 0.90, 0.0, 1.0));
+              } else if (fMat < 3.5) { // Plaster Walls: Soft cool sage-sky chalk <-> Sunlit warm ivory-apricot
+                vec3 coolW = flowed * vec3(0.84, 0.93, 1.06);
+                vec3 warmW = flowed * vec3(1.06, 1.00, 0.87);
+                flowed = mix(flowed, mix(coolW, warmW, tFlow), clamp(sPow * 0.88, 0.0, 1.0));
+              } else if (fMat < 4.5) { // Terracotta Roof: Deep kiln burgundy-clay <-> Sun-warmed apricot terracotta
+                float hueRad = mix(0.38, -0.28, tFlow) * min(1.25, sPow);
+                vec3 hCol = hueShiftColor(flowed, hueRad) * mix(0.82, 1.16, tFlow);
+                flowed = mix(flowed, hCol, clamp(sPow * 0.92, 0.0, 1.0));
+              } else if (fMat < 5.5) { // Stone & Chimney: Cool blue-slate <-> Warm limestone ochre
+                vec3 coolS = flowed * vec3(0.80, 0.92, 1.14);
+                vec3 warmS = flowed * vec3(1.14, 1.04, 0.86);
+                flowed = mix(flowed, mix(coolS, warmS, tFlow), clamp(sPow * 0.92, 0.0, 1.0));
+              } else if (fMat < 6.5) { // Cliff Dirt Strata: Distinct geological peat <-> warm loam bands
+                vec3 coolD = flowed * vec3(0.68, 0.72, 0.80);
+                vec3 warmD = flowed * vec3(1.26, 1.06, 0.82);
+                flowed = mix(flowed, mix(coolD, warmD, tFlow), clamp(sPow * 0.96, 0.0, 1.0));
+              } else { // Wildflowers
+                flowed = mix(flowed, flowed * mix(vec3(0.90, 0.94, 1.06), vec3(1.10, 1.04, 0.88), tFlow), clamp(sPow * 0.70, 0.0, 1.0));
+              }
+              diffuseColor.rgb = flowed;
+
+              // Ground & Moisture Anchoring (mossy root/plinth tint & wet river stone patina)
+              if (envWeight > 0.01) {
+                float sClamp = clamp(uObjFlowStr, 0.0, 1.25) * envWeight;
+                if (fMat >= 1.5 && fMat < 3.5 && gndProx > 0.02) {
+                  float mossAmt = gndProx * (fMat < 2.5 ? 0.56 : 0.36) * sClamp;
+                  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.58, 0.96, 0.44), clamp(mossAmt, 0.0, 0.85));
+                } else if (fMat >= 4.5 && fMat < 5.5) {
+                  if (watProx > 0.02) {
+                    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.58, 0.96, 0.84), clamp(watProx * 0.68 * sClamp, 0.0, 0.85));
+                  } else if (gndProx > 0.02) {
+                    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.72, 0.95, 0.62), clamp(gndProx * 0.34 * sClamp, 0.0, 0.80));
+                  }
+                }
+              }
+            }
+          }
+          if (uDirAO > 0.5 && vMatKind < 2.5 && uMode > 0.5) {
+            diffuseColor.rgb *= vFaceShade * vPagodaAO;
+          }
+          if (uPbrSplit > 0.5 && abs(vMatKind - 2.0) < 0.3 && uMode > 0.5) {
+            diffuseColor.rgb *= 1.08;
+          }
+          if (uSeamStr > 0.05 && uMode > 0.5) {
+            vec2 fuv = fract(vVoxUv);
+            vec2 ed = min(fuv, 1.0 - fuv);
+            float minE = min(ed.x, ed.y);
+            float fade = 1.0 - smoothstep(42.0, 145.0, vDist);
+            float seam = (1.0 - smoothstep(0.0, 0.065, minE)) * 0.13 * fade * uSeamStr;
+            float innerHi = smoothstep(0.065, 0.12, minE) * (1.0 - smoothstep(0.12, 0.22, minE)) * 0.03 * fade * uSeamStr;
+            diffuseColor.rgb = diffuseColor.rgb * (1.0 - seam) + vec3(innerHi);
+          }
+        `)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+          if (uPbrSplit > 0.5 && uMode > 0.5) {
+            if (abs(vMatKind - 1.0) < 0.3) roughnessFactor = 0.26;
+            else if (abs(vMatKind - 2.0) < 0.3) roughnessFactor = 0.72;
+            else roughnessFactor = 0.84;
+          }
+          if (uNormalBevel > 0.5 && uMode > 0.5) {
+            vec2 rfuv = fract(vVoxUv);
+            vec2 red = min(rfuv, 1.0 - rfuv);
+            float rRim = 1.0 - smoothstep(0.0, 0.105, min(red.x, red.y));
+            float bevelFade = 1.0 - smoothstep(28.0, 102.0, vDist);
+            // MagicaVoxel Edge GGX chamfer: low roughness right on cube bevel rim so edges catch specular glint
+            roughnessFactor = min(roughnessFactor, mix(roughnessFactor, 0.22, rRim * bevelFade));
+          }
+        `)
+        .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+          if (uPbrSplit > 0.5 && uMode > 0.5) {
+            if (abs(vMatKind - 1.0) < 0.3) metalnessFactor = 0.16;
+            else if (abs(vMatKind - 2.0) < 0.3) metalnessFactor = 0.0;
+            else metalnessFactor = 0.04;
+          }
+        `)
+        .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+          vec3 activeWorldN = normalize(vWorldNormal);
+          vec3 bevelTiltW = vec3(0.0);
+          float bevelEdgeMask = 0.0;
+        `)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+          if (uMode > 0.5) {
+            if (uBentNormal > 0.5) {
+              float bentW = abs(vMatKind - 2.0) < 0.3 ? 0.82 : 0.62;
+              activeWorldN = normalize(mix(activeWorldN, normalize(vBentNorm), bentW));
+              normal = normalize(mix(normal, normalize(vViewBentNorm), bentW));
+            }
+            if (uNormalBevel > 0.5) {
+              vec2 bfuv = fract(vVoxUv);
+              vec2 bed = min(bfuv, 1.0 - bfuv);
+              float bw = 0.10;
+              float sU = -1.0 + smoothstep(0.0, bw, bfuv.x) + smoothstep(1.0 - bw, 1.0, bfuv.x);
+              float sV = -1.0 + smoothstep(0.0, bw, bfuv.y) + smoothstep(1.0 - bw, 1.0, bfuv.y);
+              float bFade = 1.0 - smoothstep(28.0, 102.0, vDist);
+              float bStr = bFade * 0.46;
+              bevelEdgeMask = (1.0 - smoothstep(0.0, bw, min(bed.x, bed.y))) * bFade;
+              bevelTiltW = (vWorldTangU * sU + vWorldTangV * sV) * bStr;
+              activeWorldN = normalize(activeWorldN + bevelTiltW);
+              normal = normalize(normal + (vViewTangU * sU + vViewTangV * sV) * bStr);
+            }
+          }
+        `)
+        .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+          if (vMatKind > 2.5) {
+            // Self-illuminated warm lantern / window
+            reflectedLight.directDiffuse = vec3(0.0);
+            reflectedLight.directSpecular = vec3(0.0);
+            reflectedLight.indirectSpecular = vec3(0.0);
+            if (uMode < 0.5) {
+              reflectedLight.indirectDiffuse = diffuseColor.rgb * 0.92;
+            } else if (uBloomGlow > 0.5 || uPbrSplit > 0.5 || uColorBleed > 0.5) {
+              reflectedLight.indirectDiffuse = diffuseColor.rgb * (1.65 * (0.48 + uGlowBoost * 1.15));
+            } else {
+              reflectedLight.indirectDiffuse = diffuseColor.rgb * (0.65 + uGlowBoost * 1.45);
+            }
+          } else if (uMode < 0.5) {
+            // MODE 0: Raw Flat Uniform Block Colors
+            reflectedLight.directDiffuse = vec3(0.0);
+            reflectedLight.directSpecular = vec3(0.0);
+            reflectedLight.indirectSpecular = vec3(0.0);
+            reflectedLight.indirectDiffuse = diffuseColor.rgb * 0.92;
+          } else {
+            if (uMode < 1.5) {
+              // MODE 1: Basic Sun + Flat Gray Ambient + 1-voxel Corner AO
+              float ao1 = (uDirAO < 0.5) ? mix(0.66, 1.0, vAO) : 1.0;
+              reflectedLight.directDiffuse *= ao1;
+              reflectedLight.indirectDiffuse = diffuseColor.rgb * vec3(0.24, 0.25, 0.27) * ao1;
+            } else if (uMode < 2.5) {
+              // MODE 2: Authentic SeedWorld Original (voxel.fx + Chunk.cs)
+              float ao2 = (uDirAO < 0.5) ? ((vAO * 0.28) + 0.72) : 1.0;
+              float seedShade = min(vTopMask, vFaceSky);
+              float ny = clamp(activeWorldN.y, -1.0, 1.0);
+              vec3 skyAmb = ny >= 0.0
+                ? mix(uHorizonColor, uTopColor, smoothstep(0.0, 0.95, ny))
+                : mix(uHorizonColor, uGroundBounce, smoothstep(0.0, -0.8, ny));
+              float NdL = max(dot(activeWorldN, normalize(uSunDir)), 0.0);
+              vec3 directTerm = diffuseColor.rgb * uSunColor * (NdL * uSunIntensity * 0.62 * seedShade * ao2);
+              vec3 ambTerm = diffuseColor.rgb * skyAmb * (0.48 * seedShade * ao2);
+              reflectedLight.directDiffuse = directTerm;
+              reflectedLight.indirectDiffuse = ambTerm;
+            } else if (uMode < 3.5) {
+              // MODE 3: Soft Continuous SeedWorld GI (22.5m corner-smoothed SkyVis + 3-band sky dome)
+              float skyVis = clamp(vSmoothSky, 0.14, 1.0);
+              float ao3 = (uDirAO < 0.5) ? mix(0.72, 1.0, vAO) : 1.0;
+
+              float ny = clamp(activeWorldN.y, -1.0, 1.0);
+              vec3 skyBand = ny >= 0.0
+                ? mix(uHorizonColor, mix(uMidColor, uTopColor, smoothstep(0.15, 0.90, ny)), smoothstep(0.0, 0.52, ny))
+                : mix(uHorizonColor, uGroundBounce, smoothstep(0.0, -0.72, ny));
+
+              float sunSide = dot(activeWorldN, normalize(uSunDir)) * 0.5 + 0.5;
+              vec3 skyIrr = skyBand + uSunColor * (sunSide * 0.18);
+
+              float directAtten = mix(0.16, 1.04, pow(skyVis, 1.25)) * ((uDirAO < 0.5) ? mix(0.78, 1.0, vAO) : 1.0);
+              float indirectAtten = mix(0.32, 1.08, pow(skyVis, 0.82)) * ao3;
+
+              reflectedLight.directDiffuse *= directAtten;
+              reflectedLight.indirectDiffuse = diffuseColor.rgb * skyIrr * (0.54 * indirectAtten);
+            } else if (uMode < 4.5) {
+              // MODE 4: Previous Scene Exact Hybrid Sky GI (10.5m 12-level quantized SkyVis, 0.75 sky blend, visCurve)
+              float ny = clamp(activeWorldN.y, -1.0, 1.0);
+              vec3 skyBand = ny >= 0.0
+                ? mix(uHorizonColor, mix(uMidColor, uTopColor, smoothstep(0.15, 0.90, ny)), smoothstep(0.0, 0.55, ny))
+                : mix(uHorizonColor, uGroundBounce, smoothstep(0.0, -0.75, ny));
+              float sunScatter = max(dot(activeWorldN, normalize(uSunDir)), 0.0);
+              vec3 skyIrr = skyBand + uSunColor * (sunScatter * uSunGlowStr * 0.42);
+              vec3 giDiffuse = diffuseColor.rgb * (1.0 - metalnessFactor) * skyIrr * uSkyAmbMult;
+              bool isFol = abs(vMatKind - 2.0) < 0.3;
+              float visCurve = isFol
+                ? mix(0.38, 1.14, pow(clamp(vPagodaSky, 0.0, 1.0), 0.78))
+                : mix(0.26, 1.12, pow(clamp(vPagodaSky, 0.0, 1.0), 0.82));
+              float aoMul = (uDirAO < 0.5) ? mix(0.76, 1.0, vAO) : 1.0;
+              reflectedLight.indirectDiffuse = mix(reflectedLight.indirectDiffuse, giDiffuse, 0.75) * visCurve * aoMul;
+              reflectedLight.directDiffuse *= mix(0.68, 1.03, clamp(vPagodaSky, 0.0, 1.0));
+            } else {
+              // MODE 5: SeedWorld Vivid Blog Style — True Warm-Sun -> Cool-Cyan Hue Travel + Deep AO
+              float shadeV = clamp(mix(vFaceSky, vSmoothSky, 0.38), 0.14, 1.0);
+              float aoV = (uDirAO < 0.5) ? mix(0.42, 1.0, pow(vAO, 0.78)) : 1.0;
+
+              vec3 skyCool = pow(clamp(uTopColor * vec3(0.42, 0.96, 1.48), 0.0, 1.0), vec3(1.12));
+              vec3 horVivid = mix(uHorizonColor, uMidColor, 0.68);
+              vec3 botTeal = mix(uGroundBounce * 0.55, skyCool * 0.65, 0.62);
+              float ny = clamp(activeWorldN.y, -1.0, 1.0);
+              vec3 skyAmb = ny >= 0.0
+                ? mix(horVivid, skyCool, smoothstep(0.0, 0.9, ny))
+                : mix(horVivid, botTeal, smoothstep(0.0, -0.75, ny));
+
+              float NdL = max(dot(activeWorldN, normalize(uSunDir)), 0.0);
+              float ndlWrap = NdL > 0.001 ? pow(NdL, 0.72) * 1.15 : 0.0;
+              float sunAmt = ndlWrap * pow(shadeV, 1.15);
+              float shadowAmt = 1.0 - smoothstep(0.0, 0.68, sunAmt);
+
+              float luma = dot(diffuseColor.rgb, vec3(0.30, 0.59, 0.11));
+              vec3 warmSunTint = diffuseColor.rgb * vec3(1.16, 1.05, 0.74);
+              vec3 coolHueTarget = vec3(luma * 0.18, luma * 0.76, luma * 0.90) * mix(vec3(0.55), skyAmb * 1.85, 0.75);
+              vec3 shadowTint = mix(diffuseColor.rgb, coolHueTarget, 0.50 * shadowAmt);
+              vec3 skyInfill = skyAmb * (0.028 + 0.072 * luma) * pow(shadeV, 0.85) * (0.35 + 0.65 * aoV);
+
+              vec3 warmSun = uSunColor * vec3(1.08, 1.02, 0.86);
+              reflectedLight.directDiffuse = warmSunTint * warmSun * (sunAmt * uSunIntensity * 0.92 * aoV);
+              reflectedLight.indirectDiffuse = shadowTint * skyAmb * (0.62 * pow(shadeV, 0.90) * aoV) + skyInfill;
+            }
+
+            // MagicaVoxel Edge GGX Chamfer Catchlight & Micro Shadow Crease
+            if (uNormalBevel > 0.5 && bevelEdgeMask > 0.01) {
+              vec3 sunL = normalize(uSunDir);
+              vec3 viewW = normalize(cameraPosition - vWorldPos);
+              vec3 halfVec = normalize(sunL + viewW);
+              float sunBevel = dot(bevelTiltW, sunL);
+              float specChamfer = pow(max(dot(activeWorldN, halfVec), 0.0), 38.0) * bevelEdgeMask;
+              reflectedLight.directDiffuse += diffuseColor.rgb * uSunColor * (max(0.0, sunBevel) * 0.65 * uSunIntensity);
+              reflectedLight.directSpecular += uSunColor * (specChamfer * uSunIntensity * 0.48);
+              reflectedLight.indirectDiffuse *= (1.0 - max(0.0, -sunBevel) * 0.42);
+            }
+
+            // Chromatic 3D Flood-Fill Color Bleeding + Emissive Window Spill (weighted toward shadows & eaves so sunlit tops keep rich contrast)
+            if (uColorBleed > 0.5) {
+              vec3 airStep = normalize(mix(normalize(vWorldNormal), activeWorldN, 0.35));
+              vec3 uvw = clamp((vWorldPos + airStep * 1.15 - uVolMin) / uVolSize, 0.005, 0.995);
+              vec4 bleedSample = texture(uBleedTex, uvw);
+              vec3 albedoBounce = bleedSample.rgb * 1.32;
+              float sunFaceBias = mix(1.0, 0.34, smoothstep(0.15, 0.85, max(dot(activeWorldN, normalize(uSunDir)), 0.0)));
+              float lanternGlow = bleedSample.a * (0.50 + uGlowBoost * 1.85);
+              vec3 lanternLight = vec3(1.0, 0.62, 0.24) * lanternGlow;
+              reflectedLight.indirectDiffuse += diffuseColor.rgb * albedoBounce * (0.64 * sunFaceBias)
+                                              + diffuseColor.rgb * lanternLight * 0.95
+                                              + lanternLight * 0.045;
+            }
+
+            // MagicaVoxel MATL _media Crown Thickness Absorption + Backlight SSS + Grazing Rim
+            if (uSSS > 0.5 && abs(vMatKind - 2.0) < 0.3) {
+              float visF = (uMode >= 3.5 && uMode < 4.5) ? clamp(vPagodaSky, 0.0, 1.0)
+                         : ((uMode < 2.5) ? clamp(vFaceSky, 0.0, 1.0) : clamp(vSmoothSky, 0.0, 1.0));
+              float leafThick = clamp(vFlowMeta.w, 0.0, 1.0);
+              float beerTrans = exp(-1.75 * leafThick); // thin tips transmit brightly, dense inner boughs absorb deeply
+              vec3 viewW = normalize(cameraPosition - vWorldPos);
+              vec3 sunL = normalize(uSunDir);
+              float backScatter = pow(clamp(dot(viewW, -sunL) * 0.5 + 0.5, 0.0, 1.0), 2.1);
+              float sssWrap = pow(clamp(dot(activeWorldN, sunL) * 0.45 + 0.55, 0.0, 1.0), 1.5);
+              float rimF = pow(1.0 - clamp(dot(viewW, activeWorldN), 0.0, 1.0), 2.5);
+              float edgeMask = pow(clamp(visF, 0.14, 1.0), 0.65);
+              float sideBias = 1.0 - max(0.0, activeWorldN.y) * 0.38;
+              vec3 sssTint = diffuseColor.rgb * vec3(1.14, 1.24, 0.42);
+              vec3 rimSky = mix(mix(uHorizonColor, uMidColor, 0.55), uSunColor, 0.52);
+              reflectedLight.directDiffuse *= mix(0.84, 1.12, beerTrans);
+              reflectedLight.indirectDiffuse *= mix(0.76, 1.06, beerTrans);
+              reflectedLight.directDiffuse += sssTint * uSunColor * ((0.28 * backScatter + 0.14 * sssWrap) * (0.28 + 0.72 * beerTrans) * edgeMask * sideBias * uSunIntensity * 0.52);
+              reflectedLight.indirectDiffuse += diffuseColor.rgb * rimSky * (rimF * (0.25 + 0.42 * beerTrans) * edgeMask);
+            }
+          }
+        `);
+    };
+
+    const voxelMesh = new THREE.Mesh(meshInfo.geo, voxelMat);
+    voxelMesh.castShadow = true;
+    voxelMesh.receiveShadow = true;
+    scene.add(voxelMesh);
+
+    // =========================================================================
+    // 5. UNIFORM BROOK WATER MESH WITH MAGICAVOXEL DEPTH ABSORPTION & FRESNEL
+    // =========================================================================
+    function buildBrookMesh() {
+      const pos = [], col = [], wDepth = [], wShore = [], idx = [];
+      const wc = new THREE.Color(PALETTE_HEX[MAT_WATER]);
+      const rawDepth = (cx, cz) => {
+        if (cx < 0 || cx >= WX || cz < 0 || cz >= WZ) return 0.9;
+        return brookMask[cz * WX + cx] ? Math.max(0.65, WATER_Y - groundY[cz * WX + cx]) : 0.25;
+      };
+      const cornerInfo = (cx, cz, dx, dz) => {
+        let s = 0, edgeCnt = 0;
+        for (let oz = -1; oz <= 0; oz++) {
+          for (let ox = -1; ox <= 0; ox++) {
+            const gx = cx + dx + ox, gz = cz + dz + oz;
+            s += rawDepth(gx, gz);
+            if (gx < 0 || gx >= WX || gz < 0 || gz >= WZ || !brookMask[gz * WX + gx]) edgeCnt++;
+          }
+        }
+        return [s / 4, edgeCnt > 0 ? 1.0 : 0.0];
+      };
+
+      for (let z = 0; z < WZ; z++) {
+        for (let x = 0; x < WX; x++) {
+          if (!brookMask[z * WX + x]) continue;
+          const b = pos.length / 3;
+          const x0 = x - WX / 2, z0 = z - WZ / 2, y0 = WATER_Y + 0.14;
+          pos.push(x0, y0, z0, x0 + 1, y0, z0, x0 + 1, y0, z0 + 1, x0, y0, z0 + 1);
+          const cs = [[0,0],[1,0],[1,1],[0,1]];
+          for (const [dx, dz] of cs) {
+            const [dp, sh] = cornerInfo(x, z, dx, dz);
+            col.push(wc.r, wc.g, wc.b);
+            wDepth.push(dp);
+            wShore.push(sh);
+          }
+          idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+        }
+      }
+      const wGeo = new THREE.BufferGeometry();
+      wGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      wGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      wGeo.setAttribute('aWaterDepth', new THREE.Float32BufferAttribute(wDepth, 1));
+      wGeo.setAttribute('aShoreProx', new THREE.Float32BufferAttribute(wShore, 1));
+      wGeo.setIndex(idx);
+      wGeo.computeVertexNormals();
+
+      const waterMat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.78,
+        roughness: 0.12,
+        metalness: 0.08,
+        depthWrite: false
+      });
+      waterMat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, {
+          uMode:         sharedUniforms.uMode,
+          uWaterRefr:    sharedUniforms.uWaterRefr,
+          uTime:         sharedUniforms.uTime,
+          uMidColor:     sharedUniforms.uMidColor,
+          uHorizonColor: sharedUniforms.uHorizonColor,
+          uSunDir:       sharedUniforms.uSunDir,
+          uSunColor:     sharedUniforms.uSunColor,
+          uSunIntensity: sharedUniforms.uSunIntensity
+        });
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', `#include <common>
+            attribute float aWaterDepth;
+            attribute float aShoreProx;
+            uniform float uMode;
+            uniform float uTime;
+            varying vec3 vWaterWPos;
+            varying float vWaterDepth;
+            varying float vShoreProx;
+          `)
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+            if (uMode > 1.5) {
+              transformed.y += sin(transformed.x * 0.65 + uTime * 2.0) * 0.055
+                             + cos(transformed.z * 0.75 - uTime * 1.6) * 0.045;
+            }
+            vWaterWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+            vWaterDepth = aWaterDepth;
+            vShoreProx = aShoreProx;
+          `);
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', `#include <common>
+            uniform float uMode;
+            uniform float uWaterRefr;
+            uniform float uTime;
+            uniform vec3 uMidColor;
+            uniform vec3 uHorizonColor;
+            uniform vec3 uSunDir;
+            uniform vec3 uSunColor;
+            uniform float uSunIntensity;
+            varying vec3 vWaterWPos;
+            varying float vWaterDepth;
+            varying float vShoreProx;
+          `)
+          .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+            if (uMode < 0.5) {
+              reflectedLight.directDiffuse = vec3(0.0);
+              reflectedLight.directSpecular = vec3(0.0);
+              reflectedLight.indirectDiffuse = diffuseColor.rgb * 0.92;
+            } else if (uWaterRefr > 0.5) {
+              vec3 vDir = normalize(cameraPosition - vWaterWPos);
+              vec3 wNorm = normalize(vec3(
+                cos(vWaterWPos.x * 1.45 + uTime * 2.0) * 0.085,
+                1.0,
+                sin(vWaterWPos.z * 1.65 - uTime * 1.6) * 0.085
+              ));
+              float fresnel = pow(1.0 - clamp(dot(vDir, wNorm), 0.0, 1.0), 2.5);
+              vec3 skyRefl = mix(uMidColor, uHorizonColor, clamp(fresnel * 1.15, 0.0, 1.0));
+              float wDepth = clamp(vWaterDepth, 0.5, 3.5);
+              float beer = 1.0 - exp(-0.78 * wDepth);
+              vec3 shallowTint = vec3(0.32, 0.84, 0.86);
+              vec3 deepTint = vec3(0.03, 0.34, 0.52);
+              vec3 waterBody = mix(shallowTint, deepTint, clamp((wDepth - 0.65) / 2.2, 0.0, 1.0));
+              float cWave = sin(vWaterWPos.x * 1.9 + uTime * 2.1) * cos(vWaterWPos.z * 2.1 - uTime * 1.7);
+              float cWave2 = sin((vWaterWPos.x + vWaterWPos.z) * 1.4 - uTime * 1.5);
+              float caustic = smoothstep(0.28, 0.96, (cWave + cWave2) * 0.5 + 0.5) * exp(-0.42 * wDepth);
+              vec3 Hw = normalize(normalize(uSunDir) + vDir);
+              float sunGlint = pow(max(dot(wNorm, Hw), 0.0), 68.0) * 1.25;
+              float shoreFoam = clamp(vShoreProx, 0.0, 1.0) * 0.18;
+              reflectedLight.indirectDiffuse = waterBody * (0.38 + caustic * 0.42 + shoreFoam);
+              reflectedLight.directSpecular += uSunColor * sunGlint * uSunIntensity * 0.60;
+              reflectedLight.indirectSpecular += skyRefl * (0.32 + fresnel * 0.74);
+              diffuseColor.a = clamp(mix(0.28, 0.72, beer) + fresnel * 0.28 + shoreFoam * 0.30, 0.22, 0.94);
+            } else if (uMode > 1.5) {
+              vec3 vDir = normalize(cameraPosition - vWaterWPos);
+              float fresnel = pow(1.0 - clamp(dot(vDir, vec3(0.0, 1.0, 0.0)), 0.0, 1.0), 2.2);
+              vec3 skyRefl = mix(uMidColor, uHorizonColor, clamp(fresnel * 1.15, 0.0, 1.0));
+              reflectedLight.indirectSpecular += skyRefl * (0.28 + fresnel * 0.68);
+              diffuseColor.a = clamp(0.72 + fresnel * 0.22, 0.0, 0.94);
+            }
+          `);
+      };
+      const m = new THREE.Mesh(wGeo, waterMat);
+      m.receiveShadow = true;
+      scene.add(m);
+    }
+    buildBrookMesh();
+
+    // Update stats UI
+    document.getElementById('stat-vox').textContent = meshInfo.totalFilledVoxels.toLocaleString();
+    document.getElementById('stat-tris').textContent = Math.round(meshInfo.triCount).toLocaleString();
+    document.getElementById('stat-ms').textContent = Math.round(performance.now() - tStart);
+
+    // =========================================================================
+    // 6. TIME OF DAY CURVE (SeedWorld skymap1.png style color progression)
+    // =========================================================================
+    let currentTimeOfDay = 0.44;
+    let fogEnabled = false;
+    let bloomEnabled = false;
+    let dofEnabled = true;
+    let targetFogColor = new THREE.Color(0xd8ecfb);
+    let targetFogDensity = 0.0011;
+
+    const SKY_KEYS = [
+      { t: 0.20, top: 0x203566, mid: 0x6280b8, hor: 0xf0a684, gnd: 0x3b4d38, sun: 0xffae70, str: 0.95, glow: 0.45, sunGlow: 0.55, ambMult: 0.64, fog: 0xe39e86, fogD: 0.0018 },
+      { t: 0.28, top: 0x295ca8, mid: 0x74afe6, hor: 0xfad3b4, gnd: 0x456140, sun: 0xffd5a2, str: 1.28, glow: 0.28, sunGlow: 0.42, ambMult: 0.60, fog: 0xe6d5cf, fogD: 0.0012 },
+      { t: 0.46, top: 0x2978db, mid: 0x74c6f7, hor: 0xe6f3fc, gnd: 0x456347, sun: 0xfff5e0, str: 1.52, glow: 0.14, sunGlow: 0.24, ambMult: 0.58, fog: 0xd8ecfb, fogD: 0.0011 },
+      { t: 0.68, top: 0x32589c, mid: 0x8ea0c9, hor: 0xfcc38e, gnd: 0x4d5a3c, sun: 0xffb775, str: 1.38, glow: 0.36, sunGlow: 0.56, ambMult: 0.63, fog: 0xe8b090, fogD: 0.0016 },
+      { t: 0.75, top: 0x3b336b, mid: 0xc25970, hor: 0xffb36b, gnd: 0x423146, sun: 0xff9a52, str: 1.25, glow: 0.68, sunGlow: 0.75, ambMult: 0.66, fog: 0xe39e86, fogD: 0.0020 },
+      { t: 0.85, top: 0x16193b, mid: 0x3f336b, hor: 0x9c4e75, gnd: 0x24223d, sun: 0xa4baff, str: 0.78, glow: 0.95, sunGlow: 0.42, ambMult: 0.72, fog: 0x2b2c52, fogD: 0.0022 },
+      { t: 0.94, top: 0x050919, mid: 0x0f1c3d, hor: 0x1f3661, gnd: 0x1b2740, sun: 0xaad0ff, str: 0.65, glow: 1.00, sunGlow: 0.15, ambMult: 0.78, fog: 0x0c162b, fogD: 0.0022 }
+    ];
+
+    const cA = new THREE.Color(), cB = new THREE.Color();
+    function applyTimeOfDay(t) {
+      currentTimeOfDay = t;
+      let k0 = SKY_KEYS[0], k1 = SKY_KEYS[SKY_KEYS.length - 1];
+      for (let i = 0; i < SKY_KEYS.length - 1; i++) {
+        if (t >= SKY_KEYS[i].t && t <= SKY_KEYS[i + 1].t) {
+          k0 = SKY_KEYS[i]; k1 = SKY_KEYS[i + 1]; break;
+        }
+      }
+      const f = k1.t === k0.t ? 0 : (t - k0.t) / (k1.t - k0.t);
+      const lerpC = (hexA, hexB, out) => {
+        cA.setHex(hexA); cB.setHex(hexB);
+        out.copy(cA).lerp(cB, f);
+      };
+
+      lerpC(k0.top, k1.top, sharedUniforms.uTopColor.value);
+      lerpC(k0.mid, k1.mid, sharedUniforms.uMidColor.value);
+      lerpC(k0.hor, k1.hor, sharedUniforms.uHorizonColor.value);
+      lerpC(k0.gnd, k1.gnd, sharedUniforms.uGroundBounce.value);
+      lerpC(k0.sun, k1.sun, sharedUniforms.uSunColor.value);
+      lerpC(k0.fog, k1.fog, targetFogColor);
+
+      const sunStr = THREE.MathUtils.lerp(k0.str, k1.str, f);
+      const glowB = THREE.MathUtils.lerp(k0.glow, k1.glow, f);
+      sharedUniforms.uSunIntensity.value = sunStr;
+      sharedUniforms.uGlowBoost.value = glowB;
+      sharedUniforms.uSunGlowStr.value = THREE.MathUtils.lerp(k0.sunGlow, k1.sunGlow, f);
+      sharedUniforms.uSkyAmbMult.value = THREE.MathUtils.lerp(k0.ambMult, k1.ambMult, f);
+      targetFogDensity = THREE.MathUtils.lerp(k0.fogD, k1.fogD, f);
+
+      const az = THREE.MathUtils.lerp(-1.25, 1.35, (t - 0.2) / 0.72);
+      const elev = Math.max(0.18, Math.sin(THREE.MathUtils.clamp((t - 0.16) / 0.68, 0.08, 0.92) * Math.PI) * 0.92);
+      const dirVec = new THREE.Vector3(Math.cos(az), elev * 1.15, Math.sin(az) * 0.75 + 0.45).normalize();
+      sharedUniforms.uSunDir.value.copy(dirVec);
+
+      sunLight.position.copy(dirVec).multiplyScalar(78);
+      sunLight.color.copy(sharedUniforms.uSunColor.value);
+      // Mode 4 (Pagoda parity) uses slightly stronger direct sun balanced by dirShade & AO
+      const modeScale = sharedUniforms.uMode.value >= 3.5 ? 1.24 : 1.0;
+      sunLight.intensity = sunStr * modeScale;
+
+      hemiLight.color.copy(sharedUniforms.uMidColor.value);
+      hemiLight.groundColor.copy(sharedUniforms.uGroundBounce.value);
+
+      scene.fog.color.copy(targetFogColor);
+      scene.fog.density = fogEnabled ? targetFogDensity : 0.0;
+
+      const lightStr = bloomEnabled ? (0.45 + glowB * 2.2) : 0.0;
+      accentLights[0].intensity = lightStr * 1.25;
+      accentLights[1].intensity = lightStr * 0.85;
+
+      const minsTotal = Math.round(t * 24 * 60);
+      const hh = String(Math.floor(minsTotal / 60) % 24).padStart(2, '0');
+      const mm = String(minsTotal % 60).padStart(2, '0');
+      document.getElementById('time-label').textContent = `${hh}:${mm}`;
+    }
+    applyTimeOfDay(0.44);
+
+    // =========================================================================
+    // 7. CAMERA PRESETS, COMPOSABLE PIPELINE PRESETS & UI HANDLERS
+    // =========================================================================
+    const CAM_PRESETS = {
+      overview: { pos: [50, 41, 66],  target: [0, 16, 4] },
+      tree:     { pos: [12, 24, 30],  target: [-15, 18, -3] },
+      canopy:   { pos: [4, 15, 19],   target: [-14, 21, -4] },
+      eaves:    { pos: [0, 19, 22],   target: [12, 17, -4] },
+      brook:    { pos: [35, 18, 42],  target: [6, 15, 8] }
+    };
+
+    const MODE_DESC = {
+      0: '<b>0. 纯色块原貌</b>：关闭所有光照、AO 与特效，直接展示原始 RGB，验证树冠/草坪/墙体内部完全一致的固定单色块。',
+      1: '<b>1. 普通直光 + AO</b>：平行太阳光 + 固定纯灰环境光 + 1 格邻域角点 AO，无天光半球射线。',
+      2: '<b>2. 原版 SeedWorld</b>：Chunk.cs/voxel.fx 逐面 48 射线平滑 + 顶部掩码 + Normal.y 天图环境光。不用 ShadowMap 也有体积感，但相邻块可见细微台阶。',
+      3: '<b>3. 柔和连续 22.5m ✨</b>：本场景核心方案——48 射线天光可见度 4 角平滑插值 + 3 段天顶冷暖散射，无硬投影贴图即可产生柔滑草地树荫与墙面渐变。',
+      4: '<b>4. 上一场景 Sky GI</b>：五重塔场景核芯——34 点射线 10.5m 12 级量化、0.75 天顶反光混合与 visCurve。搭配下方全开关即达成 100% 等效管线！',
+      5: '<b>5. 原图高饱和风 🎨</b>：补齐 SeedWorld 博文图中的三大特征——sRGB 空间天蓝环境加减混色（暗部自动偏青深绿）、强直角凹槽 AO [0.42..1.0] 与高饱和太阳/天光冷暖反差，建议切换至「仰视树冠内腔」感受！'
+    };
+
+    let camAnim = null;
+    document.querySelectorAll('.cam-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const p = CAM_PRESETS[btn.dataset.cam];
+        camAnim = {
+          startPos: camera.position.clone(),
+          endPos: new THREE.Vector3(...p.pos),
+          startTgt: controls.target.clone(),
+          endTgt: new THREE.Vector3(...p.target),
+          t: 0
+        };
+      });
+    });
+
+    let biomeEnabled = true;
+
+    function applyBiomeColorBuffer() {
+      const colAttr = meshInfo.geo.getAttribute('color');
+      const src = biomeEnabled ? meshInfo.colBiomeArr : meshInfo.colUniformArr;
+      colAttr.array.set(src);
+      colAttr.needsUpdate = true;
+    }
+
+    function syncPresetHighlight() {
+      const m = sharedUniforms.uMode.value;
+      const biome = biomeEnabled;
+      const flowM = sharedUniforms.uObjFlowMode.value;
+      const bent = sharedUniforms.uBentNormal.value > 0.5;
+      const bleed = sharedUniforms.uColorBleed.value > 0.5;
+      const nbev = sharedUniforms.uNormalBevel.value > 0.5;
+      const sss = sharedUniforms.uSSS.value > 0.5;
+      const watR = sharedUniforms.uWaterRefr.value > 0.5;
+      const pbr = sharedUniforms.uPbrSplit.value > 0.5;
+      const bev = sharedUniforms.uSeamStr.value > 0.5;
+      const dir = sharedUniforms.uDirAO.value > 0.5;
+      const shd = sunLight.castShadow;
+      const anyStyle = bent || bleed || nbev || sss || watR || dofEnabled || flowM > 0;
+      const allStyle = bent && bleed && nbev && sss && watR;
+      const isSoft = (m === 3 && !anyStyle && !pbr && !bev && !dir && !shd && !fogEnabled && !bloomEnabled);
+      const isVivid = (m === 5 && biome && !anyStyle && !pbr && !bev && !dir && !shd && !fogEnabled && !bloomEnabled);
+      const isStylized = (m === 5 && biome && allStyle && flowM === 3 && !pbr && !bev && !dir && !shd && !fogEnabled && !bloomEnabled);
+      const isPagoda = (m === 4 && bent && bleed && nbev && sss && pbr && bev && dir && shd && fogEnabled && bloomEnabled);
+      document.querySelectorAll('[data-preset]').forEach(b => {
+        const k = b.dataset.preset;
+        b.classList.toggle('active',
+          (k === 'soft' && isSoft) || (k === 'vivid' && isVivid) ||
+          (k === 'stylized' && isStylized) || (k === 'pagoda' && isPagoda)
+        );
+      });
+    }
+
+    function setPipelineState({ mode, biome, flowMode, flowStr, bent, bleed, nbevel, sss, waterRefr, dof, pbr, bevel, dirAO, shadowMap, fog, bloom }) {
+      if (mode !== undefined) {
+        sharedUniforms.uMode.value = mode;
+        document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', Number(b.dataset.mode) === mode));
+        document.getElementById('mode-desc').innerHTML = MODE_DESC[mode];
+      }
+      if (biome !== undefined) {
+        biomeEnabled = biome;
+        document.getElementById('btn-biome').classList.toggle('active', biome);
+        applyBiomeColorBuffer();
+      }
+      if (flowMode !== undefined) {
+        sharedUniforms.uObjFlowMode.value = flowMode;
+        document.querySelectorAll('[data-flow]').forEach(b => b.classList.toggle('active', Number(b.dataset.flow) === flowMode));
+      }
+      if (flowStr !== undefined) {
+        sharedUniforms.uObjFlowStr.value = flowStr;
+        const pct = Math.round(flowStr * 100);
+        document.getElementById('flow-slider').value = pct;
+        document.getElementById('flow-str-label').textContent = `${pct}%`;
+      }
+      if (bent !== undefined) {
+        sharedUniforms.uBentNormal.value = bent ? 1.0 : 0.0;
+        document.getElementById('btn-bent').classList.toggle('active', bent);
+      }
+      if (bleed !== undefined) {
+        sharedUniforms.uColorBleed.value = bleed ? 1.0 : 0.0;
+        document.getElementById('btn-bleed').classList.toggle('active', bleed);
+      }
+      if (nbevel !== undefined) {
+        sharedUniforms.uNormalBevel.value = nbevel ? 1.0 : 0.0;
+        document.getElementById('btn-nbevel').classList.toggle('active', nbevel);
+      }
+      if (sss !== undefined) {
+        sharedUniforms.uSSS.value = sss ? 1.0 : 0.0;
+        document.getElementById('btn-sss').classList.toggle('active', sss);
+      }
+      if (waterRefr !== undefined) {
+        sharedUniforms.uWaterRefr.value = waterRefr ? 1.0 : 0.0;
+        document.getElementById('btn-water').classList.toggle('active', waterRefr);
+      }
+      if (dof !== undefined) {
+        dofEnabled = dof;
+        document.getElementById('btn-dof').classList.toggle('active', dof);
+      }
+      if (pbr !== undefined) {
+        sharedUniforms.uPbrSplit.value = pbr ? 1.0 : 0.0;
+        document.getElementById('btn-pbr').classList.toggle('active', pbr);
+      }
+      if (bevel !== undefined) {
+        sharedUniforms.uSeamStr.value = bevel ? 1.0 : 0.0;
+        document.getElementById('btn-seams').classList.toggle('active', bevel);
+      }
+      if (dirAO !== undefined) {
+        sharedUniforms.uDirAO.value = dirAO ? 1.0 : 0.0;
+        document.getElementById('btn-dirao').classList.toggle('active', dirAO);
+      }
+      if (shadowMap !== undefined) {
+        sunLight.castShadow = shadowMap;
+        document.getElementById('btn-shadowmap').classList.toggle('active', shadowMap);
+      }
+      if (fog !== undefined) {
+        fogEnabled = fog;
+        document.getElementById('btn-fog').classList.toggle('active', fog);
+      }
+      if (bloom !== undefined) {
+        bloomEnabled = bloom;
+        sharedUniforms.uBloomGlow.value = bloom ? 1.0 : 0.0;
+        document.getElementById('btn-bloom').classList.toggle('active', bloom);
+      }
+      applyTimeOfDay(currentTimeOfDay);
+      syncPresetHighlight();
+    }
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = btn.dataset.preset;
+        if (p === 'soft') {
+          setPipelineState({ mode: 3, biome: false, flowMode: 0, bent: false, bleed: false, nbevel: false, sss: false, waterRefr: false, dof: false, pbr: false, bevel: false, dirAO: false, shadowMap: false, fog: false, bloom: false });
+        } else if (p === 'vivid') {
+          setPipelineState({ mode: 5, biome: true, flowMode: 0, bent: false, bleed: false, nbevel: false, sss: false, waterRefr: false, dof: false, pbr: false, bevel: false, dirAO: false, shadowMap: false, fog: false, bloom: false });
+        } else if (p === 'stylized') {
+          setPipelineState({ mode: 5, biome: true, flowMode: 3, flowStr: 0.78, bent: true, bleed: true, nbevel: true, sss: true, waterRefr: true, dof: true, pbr: false, bevel: false, dirAO: false, shadowMap: false, fog: false, bloom: false });
+        } else if (p === 'pagoda') {
+          setPipelineState({ mode: 4, biome: false, flowMode: 0, bent: true, bleed: true, nbevel: true, sss: true, waterRefr: false, dof: false, pbr: true, bevel: true, dirAO: true, shadowMap: true, fog: true, bloom: true });
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-flow]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setPipelineState({ flowMode: Number(btn.dataset.flow) });
+      });
+    });
+    const flowSlider = document.getElementById('flow-slider');
+    flowSlider.addEventListener('input', (e) => {
+      const pct = Number(e.target.value);
+      const nextMode = (pct > 0 && sharedUniforms.uObjFlowMode.value === 0) ? 3 : undefined;
+      setPipelineState({ flowMode: nextMode, flowStr: pct / 100 });
+    });
+
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setPipelineState({ mode: Number(btn.dataset.mode) });
+      });
+    });
+
+    const todSlider = document.getElementById('tod-slider');
+    document.querySelectorAll('[data-tod]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-tod]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const val = Number(btn.dataset.tod);
+        todSlider.value = val;
+        applyTimeOfDay(val);
+      });
+    });
+    todSlider.addEventListener('input', (e) => {
+      document.querySelectorAll('[data-tod]').forEach(b => b.classList.remove('active'));
+      applyTimeOfDay(Number(e.target.value));
+    });
+
+    document.getElementById('btn-bent').addEventListener('click', () => {
+      setPipelineState({ bent: sharedUniforms.uBentNormal.value < 0.5 });
+    });
+    document.getElementById('btn-bleed').addEventListener('click', () => {
+      setPipelineState({ bleed: sharedUniforms.uColorBleed.value < 0.5 });
+    });
+    document.getElementById('btn-nbevel').addEventListener('click', () => {
+      setPipelineState({ nbevel: sharedUniforms.uNormalBevel.value < 0.5 });
+    });
+    document.getElementById('btn-sss').addEventListener('click', () => {
+      setPipelineState({ sss: sharedUniforms.uSSS.value < 0.5 });
+    });
+    document.getElementById('btn-biome').addEventListener('click', () => {
+      setPipelineState({ biome: !biomeEnabled });
+    });
+    document.getElementById('btn-water').addEventListener('click', () => {
+      setPipelineState({ waterRefr: sharedUniforms.uWaterRefr.value < 0.5 });
+    });
+    document.getElementById('btn-dof').addEventListener('click', () => {
+      setPipelineState({ dof: !dofEnabled });
+    });
+    document.getElementById('btn-pbr').addEventListener('click', () => {
+      setPipelineState({ pbr: sharedUniforms.uPbrSplit.value < 0.5 });
+    });
+    document.getElementById('btn-seams').addEventListener('click', () => {
+      setPipelineState({ bevel: sharedUniforms.uSeamStr.value < 0.5 });
+    });
+    document.getElementById('btn-dirao').addEventListener('click', () => {
+      setPipelineState({ dirAO: sharedUniforms.uDirAO.value < 0.5 });
+    });
+    document.getElementById('btn-shadowmap').addEventListener('click', () => {
+      setPipelineState({ shadowMap: !sunLight.castShadow });
+    });
+    document.getElementById('btn-fog').addEventListener('click', () => {
+      setPipelineState({ fog: !fogEnabled });
+    });
+    document.getElementById('btn-bloom').addEventListener('click', () => {
+      setPipelineState({ bloom: !bloomEnabled });
+    });
+
+    // Live uniform single-hex leaf color swapper (updates Hero Tree in both buffers + companion leaves in uniform buffer)
+    const leafTmpColor = new THREE.Color();
+    document.querySelectorAll('.leaf-pick').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hex = Number(btn.dataset.leaf);
+        leafTmpColor.setHex(hex);
+        const colAttr = meshInfo.geo.getAttribute('color');
+        const vm = meshInfo.vertMats;
+        const uArr = meshInfo.colUniformArr;
+        const bArr = meshInfo.colBiomeArr;
+        for (let i = 0; i < vm.length; i++) {
+          const m = vm[i];
+          const j = i * 3;
+          if (m === MAT_LEAF) {
+            bArr[j] = leafTmpColor.r; bArr[j + 1] = leafTmpColor.g; bArr[j + 2] = leafTmpColor.b;
+          }
+          if (m === MAT_LEAF || m === MAT_LEAF_AUTUMN || m === MAT_LEAF_PINE) {
+            uArr[j] = leafTmpColor.r; uArr[j + 1] = leafTmpColor.g; uArr[j + 2] = leafTmpColor.b;
+            if (!biomeEnabled || m === MAT_LEAF) {
+              colAttr.setXYZ(i, leafTmpColor.r, leafTmpColor.g, leafTmpColor.b);
+            }
+          }
+        }
+        colAttr.needsUpdate = true;
+        document.getElementById('leaf-dot').style.background = '#' + hex.toString(16).padStart(6, '0');
+        document.querySelectorAll('.leaf-pick').forEach(b => {
+          b.style.borderColor = (b === btn) ? '#fff' : 'rgba(255,255,255,0.4)';
+        });
+      });
+    });
+
+    let autoOrbit = false;
+    document.getElementById('btn-orbit').addEventListener('click', (e) => {
+      autoOrbit = !autoOrbit;
+      controls.autoRotate = autoOrbit;
+      controls.autoRotateSpeed = 0.7;
+      e.currentTarget.classList.toggle('active', autoOrbit);
+    });
+
+    const hudEl = document.getElementById('hud');
+    const showHudBtn = document.getElementById('show-hud-btn');
+    function toggleHud() {
+      const hidden = hudEl.classList.toggle('hidden');
+      showHudBtn.classList.toggle('visible', hidden);
+    }
+    document.getElementById('btn-hide').addEventListener('click', toggleHud);
+    showHudBtn.addEventListener('click', toggleHud);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'h' || e.key === 'H') toggleHud();
+    });
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth, h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      composer.setSize(w, h);
+      dofPass.uniforms.uTexel.value.set(1 / w, 1 / h);
+    });
+
+    // =========================================================================
+    // 8. ANIMATION LOOP
+    // =========================================================================
+    const clock = new THREE.Clock();
+    const fpsEl = document.getElementById('stat-fps');
+    let fpsSum = 0, fpsCnt = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, clock.getDelta());
+      sharedUniforms.uTime.value = clock.elapsedTime;
+
+      fpsSum += dt; fpsCnt++;
+      if (fpsSum >= 0.4) {
+        fpsEl.textContent = Math.round(fpsCnt / fpsSum);
+        fpsSum = 0; fpsCnt = 0;
+      }
+
+      if (camAnim) {
+        camAnim.t = Math.min(1, camAnim.t + dt * 1.9);
+        const s = camAnim.t * camAnim.t * (3 - 2 * camAnim.t);
+        camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, s);
+        controls.target.lerpVectors(camAnim.startTgt, camAnim.endTgt, s);
+        if (camAnim.t >= 1) camAnim = null;
+      }
+      controls.update();
+      bloomPass.enabled = bloomEnabled;
+      dofPass.enabled = dofEnabled;
+      if (bloomEnabled || dofEnabled) {
+        composer.render();
+      } else {
+        renderer.render(scene, camera);
+      }
+    }
+
+    loaderFill.style.width = '100%';
+    loaderStatus.textContent = '就绪！';
+    setTimeout(() => document.getElementById('loader').classList.add('fade'), 180);
+    setTimeout(() => document.getElementById('loader').remove(), 700);
+
+    animate();
+  </script>
+</body>
+</html>
