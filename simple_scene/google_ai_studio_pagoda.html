@@ -1203,10 +1203,21 @@ function meshVoxels() {
 // ============================================================================
 // 6. THREE.JS SCENE, SHADERS, SKY, LIGHTING & POST-PROCESSING
 // ============================================================================
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const isSoftwareGl = (() => {
+  const probeCanvas = document.createElement('canvas');
+  const gl = probeCanvas.getContext('webgl2') || probeCanvas.getContext('webgl');
+  if (!gl) return true;
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const param = ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER;
+  const gpu = String(gl.getParameter(param) || '');
+  gl.getExtension('WEBGL_lose_context')?.loseContext();
+  return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
+})();
+
+const renderer = new THREE.WebGLRenderer({ antialias: !isSoftwareGl, powerPreference: 'high-performance' });
+renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !isSoftwareGl;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -1609,8 +1620,28 @@ window.addEventListener('resize', () => {
 const clock = new THREE.Clock();
 const koiPos = new THREE.Vector3(), koiLook = new THREE.Vector3(), koiSide = new THREE.Vector3();
 
+function afterDraw(cb) {
+  const gl = renderer.getContext();
+  if (typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext && gl.fenceSync) {
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+    const poll = () => {
+      const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
+      if (state === gl.UNSIGNALED) {
+        window.setTimeout(poll, 5);
+      } else {
+        if (sync) gl.deleteSync(sync);
+        window.setTimeout(cb, 80);
+      }
+    };
+    window.setTimeout(poll, 5);
+  } else {
+    window.setTimeout(cb, 80);
+  }
+}
+
 function animate() {
-  requestAnimationFrame(animate);
+  if (!isSoftwareGl) requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.getElapsedTime();
   sharedU.uTime.value = t;
@@ -1767,7 +1798,12 @@ function animate() {
     fireflyInst.instanceMatrix.needsUpdate = true;
   }
 
-  composer.render();
+  if (isSoftwareGl) {
+    renderer.render(scene, camera);
+    afterDraw(animate);
+  } else {
+    composer.render();
+  }
 }
 
 async function init() {

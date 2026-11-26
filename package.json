@@ -1,0 +1,17 @@
+{
+  "name": "seedworld-voxel-scenes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node --check server.js && node --check lib/scenes.js",
+    "lint": "node --check server.js && node --check lib/scenes.js",
+    "test": "node --test lib/scenes.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "three": "0.164.1"
+  }
+}
