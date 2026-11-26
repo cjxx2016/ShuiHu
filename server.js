@@ -15,7 +15,6 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, scenes: SCENES });
 });
 
-// Serve Three.js locally so standalone HTML scenes do not depend on external CDNs
 app.use(
   '/vendor/three',
   express.static(path.join(__dirname, 'node_modules', 'three'), {
@@ -23,7 +22,6 @@ app.use(
   })
 );
 
-// Intercept standalone scene HTML files to rewrite external Three.js CDN URLs to local vendor paths
 app.get('/simple_scene/:fileName', async (req, res, next) => {
   const { fileName } = req.params;
   if (!fileName || !fileName.endsWith('.html') || fileName.includes('..') || fileName.includes('/')) {
@@ -35,19 +33,20 @@ app.get('/simple_scene/:fileName', async (req, res, next) => {
     const localHtml = rewriteImportMap(rawHtml);
     res.type('text/html; charset=utf-8').send(localHtml);
   } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      return next();
-    }
+    if (err && err.code === 'ENOENT') return next();
     return next(err);
   }
 });
 
 app.use('/simple_scene', express.static(path.join(__dirname, 'simple_scene')));
 
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+// Serve production Vite build
+app.use(express.static(path.join(__dirname, 'dist')));
+
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(PORT, HOST, () => {
-  console.log(`SeedWorld Voxel Scenes server listening on http://${HOST}:${PORT}`);
+  console.log(`Water Margin RPG server listening on http://${HOST}:${PORT}`);
 });
