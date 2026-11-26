@@ -1,0 +1,2289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitsune Valley — 3D Voxel Pagoda, Garden & Village</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+JP:wght@600;700;900&display=swap" rel="stylesheet">
+    <!-- Three.js r128 & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Inter', sans-serif;
+        }
+        .font-serif-jp {
+            font-family: 'Noto Serif JP', serif;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Custom Glassmorphism & Scrollbars */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+        }
+        .glass-button {
+            background: rgba(30, 41, 59, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .glass-button:hover {
+            background: rgba(51, 65, 85, 0.9);
+            border-color: rgba(244, 114, 182, 0.5);
+            transform: translateY(-1px);
+        }
+        .glass-button.active {
+            background: linear-gradient(135deg, rgba(225, 29, 72, 0.85), rgba(219, 39, 119, 0.85));
+            border-color: rgba(251, 113, 133, 0.8);
+            box-shadow: 0 0 16px rgba(225, 29, 72, 0.45);
+        }
+        /* Range Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #1e1b4b 0%, #f97316 25%, #38bdf8 50%, #fb7185 78%, #1e1b4b 100%);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 2px solid #f43f5e;
+            margin-top: -5px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        }
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
+        .animate-pulse-soft {
+            animation: pulse-soft 2.2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="text-slate-100 antialiased">
+
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 transition-opacity duration-700">
+        <div class="relative flex flex-col items-center max-w-md px-6 text-center">
+            <div class="w-16 h-16 mb-5 rounded-2xl bg-gradient-to-br from-rose-500 via-pink-500 to-amber-400 p-0.5 shadow-2xl shadow-rose-500/30 flex items-center justify-center">
+                <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                    <span class="text-3xl">⛩️</span>
+                </div>
+            </div>
+            <h1 class="font-serif-jp text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2">
+                Kitsune Valley &amp; The Crimson Pagoda
+            </h1>
+            <p class="text-sm text-slate-400 mb-6" id="loading-status">
+                Sculpting voxel terrain, five-tier pagoda, sakura groves, and village...
+            </p>
+            <div class="w-64 h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
+                <div id="loading-bar" class="h-full bg-gradient-to-r from-rose-500 via-pink-400 to-amber-300 w-1/3 transition-all duration-300 rounded-full"></div>
+            </div>
+            <span class="text-xs text-slate-500 font-mono" id="loading-subtext">Generating Instanced Voxel Meshes...</span>
+        </div>
+    </div>
+
+    <!-- Top Header & Stats Bar -->
+    <header id="ui-header" class="fixed top-0 left-0 right-0 z-20 p-3 sm:p-5 pointer-events-none flex flex-wrap items-start justify-between gap-3 transition-opacity duration-300">
+        <!-- Brand & Scene Info -->
+        <div class="glass-panel rounded-2xl px-4 py-3 pointer-events-auto flex items-center gap-3.5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center text-xl shadow-lg shadow-rose-600/30 shrink-0">
+                🏯
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-serif-jp font-bold text-base sm:text-lg text-white tracking-wide">
+                        紅塔の里 • Crimson Pagoda Valley
+                    </h1>
+                    <span class="hidden sm:inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30">
+                        Interactive Voxel Diorama
+                    </span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300 mt-0.5">
+                    <span class="flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+                        <strong id="stat-voxels" class="font-mono text-white">0</strong> Voxels
+                    </span>
+                    <span class="text-slate-600">•</span>
+                    <span><strong id="stat-villagers" class="font-mono text-pink-300">34</strong> Villagers</span>
+                    <span class="text-slate-600">•</span>
+                    <span><strong id="stat-koi" class="font-mono text-amber-300">20</strong> Koi Fish</span>
+                    <span class="text-slate-600 hidden sm:inline">•</span>
+                    <span class="hidden sm:inline font-mono text-slate-400"><span id="stat-fps">60</span> FPS</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Quick Action Buttons & Inspector Banner -->
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <div id="poi-badge" class="glass-panel rounded-2xl px-3.5 py-2 text-xs flex items-center gap-2 border-pink-400/30">
+                <span id="poi-icon" class="text-base">🌸</span>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-pink-300 font-semibold" id="poi-category">Active View</div>
+                    <div class="font-medium text-white" id="poi-title">Sanctuary &amp; Village Overview</div>
+                </div>
+            </div>
+
+            <button id="btn-toggle-ui" title="Toggle UI Controls (H)" class="glass-panel glass-button rounded-2xl p-3 text-slate-200 hover:text-white flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Floating Villager Follow Card (Shown when following a villager) -->
+    <div id="villager-card" class="fixed top-24 left-3 sm:left-5 z-20 glass-panel rounded-2xl p-3.5 w-72 hidden transition-all duration-300">
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-400 animate-ping"></span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-rose-300">Following Villager</span>
+            </div>
+            <button id="btn-stop-follow" class="text-xs text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-800/80">
+                Exit
+            </button>
+        </div>
+        <div class="flex items-center gap-3">
+            <div id="villager-avatar" class="w-10 h-10 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center text-xl">
+                👘
+            </div>
+            <div class="flex-1 min-w-0">
+                <div id="villager-name" class="font-bold text-sm text-white truncate">Hana the Tea Merchant</div>
+                <div id="villager-role" class="text-xs text-slate-300 truncate">Strolling across the Drum Bridge</div>
+            </div>
+        </div>
+        <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+            <button id="btn-prev-villager" class="glass-button flex-1 py-1.5 rounded-lg text-xs font-medium text-slate-200">
+                ← Prev Villager
+            </button>
+            <button id="btn-next-villager" class="glass-button flex-1 py-1.5 rounded-lg text-xs font-medium text-slate-200">
+                Next Villager →
+            </button>
+        </div>
+    </div>
+
+    <!-- Bottom Control Dock -->
+    <footer id="ui-footer" class="fixed bottom-0 left-0 right-0 z-20 p-3 sm:p-5 pointer-events-none flex flex-col lg:flex-row items-stretch lg:items-end justify-between gap-3 transition-opacity duration-300">
+        
+        <!-- Camera Bookmark Presets -->
+        <div class="glass-panel rounded-2xl p-2.5 pointer-events-auto flex flex-col gap-2">
+            <div class="flex items-center justify-between px-1">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Camera Views &amp; Guided Tour</span>
+                <span class="text-[11px] text-slate-400 hidden sm:inline">Drag to Orbit • Scroll to Zoom • Click Villager to Follow</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+                <button data-cam="overview" class="cam-btn glass-button active px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                    <span>🗺️</span><span>Valley Overview</span>
+                </button>
+                <button data-cam="pagoda" class="cam-btn glass-button px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                    <span>🏯</span><span>5-Tier Pagoda</span>
+                </button>
+                <button data-cam="bridge" class="cam-btn glass-button px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                    <span>🌉</span><span>Koi Bridge</span>
+                </button>
+                <button data-cam="market" class="cam-btn glass-button px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                    <span>🏮</span><span>Village Market</span>
+                </button>
+                <button data-cam="waterfall" class="cam-btn glass-button px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                    <span>🌊</span><span>Waterfall &amp; Mill</span>
+                </button>
+                <button data-cam="villager" class="cam-btn glass-button px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                    <span>👘</span><span>Follow Villager</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Time of Day, Weather & Atmosphere Controls -->
+        <div class="glass-panel rounded-2xl p-3 pointer-events-auto flex flex-col gap-2.5 min-w-[290px] sm:min-w-[360px]">
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Atmosphere &amp; Time</span>
+                    <span id="time-display" class="text-xs font-mono font-semibold text-amber-300 bg-slate-900/80 px-2 py-0.5 rounded-md border border-white/10">
+                        16:30 • Golden Hour
+                    </span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button id="btn-auto-rotate" class="glass-button px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-200" title="Toggle Turntable Camera">
+                        🔄 Orbit
+                    </button>
+                    <button id="btn-auto-time" class="glass-button px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-200" title="Cycle Day & Night Automatically">
+                        ⏱️ Cycle
+                    </button>
+                </div>
+            </div>
+
+            <!-- Time Slider -->
+            <div class="flex items-center gap-2.5">
+                <span class="text-xs" title="Midnight">🌙</span>
+                <input id="time-slider" type="range" min="0" max="24" step="0.05" value="15.8" class="w-full" />
+                <span class="text-xs" title="Noon">☀️</span>
+            </div>
+
+            <!-- Quick Lighting Presets -->
+            <div class="grid grid-cols-4 gap-1.5">
+                <button data-time="9.5" class="time-btn glass-button py-1 rounded-lg text-[11px] font-medium text-slate-200">
+                    🌸 Morning
+                </button>
+                <button data-time="13.5" class="time-btn glass-button py-1 rounded-lg text-[11px] font-medium text-slate-200">
+                    ☀️ Midday
+                </button>
+                <button data-time="17.6" class="time-btn glass-button active py-1 rounded-lg text-[11px] font-medium text-slate-200">
+                    🌇 Sunset
+                </button>
+                <button data-time="21.5" class="time-btn glass-button py-1 rounded-lg text-[11px] font-medium text-slate-200">
+                    🏮 Night
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Application Script -->
+    <script>
+    (function () {
+        'use strict';
+
+        // ============================================================================
+        // 1. DETERMINISTIC PSEUDO-RANDOM GENERATOR & COLOR PALETTE HELPERS
+        // ============================================================================
+        let seed = 133742;
+        function rand() {
+            seed = (seed * 16807) % 2147483647;
+            return (seed - 1) / 2147483646;
+        }
+        function randRange(min, max) {
+            return min + rand() * (max - min);
+        }
+        function randInt(min, max) {
+            return Math.floor(randRange(min, max + 1));
+        }
+        function pick(arr) {
+            return arr[Math.floor(rand() * arr.length)];
+        }
+
+        // Smooth noise helper for organic hillsides and foliage
+        function hash2D(x, z) {
+            const n = Math.sin(x * 127.1 + z * 311.7) * 43758.5453123;
+            return n - Math.floor(n);
+        }
+        function smoothNoise(x, z) {
+            const ix = Math.floor(x), iz = Math.floor(z);
+            const fx = x - ix, fz = z - iz;
+            const ux = fx * fx * (3 - 2 * fx);
+            const uz = fz * fz * (3 - 2 * fz);
+            const a = hash2D(ix, iz);
+            const b = hash2D(ix + 1, iz);
+            const c = hash2D(ix, iz + 1);
+            const d = hash2D(ix + 1, iz + 1);
+            return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+        }
+        function fbm(x, z) {
+            return smoothNoise(x * 0.04, z * 0.04) * 0.65 +
+                   smoothNoise(x * 0.09, z * 0.09) * 0.25 +
+                   smoothNoise(x * 0.2, z * 0.2) * 0.10;
+        }
+
+        // Color utility with subtle per-voxel organic jitter
+        const tempColor = new THREE.Color();
+        function jitterHex(hex, variance = 0.035) {
+            tempColor.setHex(hex);
+            const hsl = { h: 0, s: 0, l: 0 };
+            tempColor.getHSL(hsl);
+            hsl.h = (hsl.h + (rand() - 0.5) * variance * 0.35 + 1) % 1;
+            hsl.s = Math.max(0, Math.min(1, hsl.s + (rand() - 0.5) * variance));
+            hsl.l = Math.max(0.02, Math.min(0.98, hsl.l + (rand() - 0.5) * variance));
+            tempColor.setHSL(hsl.h, hsl.s, hsl.l);
+            return tempColor.getHex();
+        }
+
+        // Rich Japanese Voxel Color Palette
+        const PALETTE = {
+            // Earth & Stone
+            BASALT_DARK: 0x1e242b,
+            BASALT_MID: 0x2c3540,
+            EARTH_BROWN: 0x5c4033,
+            DIRT_WARM: 0x73513d,
+            STONE_DARK: 0x525b66,
+            STONE_MID: 0x747f8c,
+            STONE_LIGHT: 0x9aa5b1,
+            STONE_PALE: 0xc2cbd4,
+            COBBLE_A: 0x6b7280,
+            COBBLE_B: 0x848d97,
+            COBBLE_MOSS: 0x5f7a61,
+            SAND_GRAVEL: 0xd6cfc2,
+
+            // Grass & Moss
+            GRASS_LUSH: 0x4d8c57,
+            GRASS_MID: 0x5ea365,
+            GRASS_BRIGHT: 0x74b876,
+            GRASS_GOLD: 0x8ab867,
+            MOSS_GREEN: 0x3f704d,
+            TEA_LEAF: 0x468942,
+
+            // Water
+            WATER_DEEP: 0x0ea5e9,
+            WATER_SHALLOW: 0x38bdf8,
+            WATER_FOAM: 0xe0f2fe,
+
+            // Pagoda & Architecture
+            CRIMSON_MAIN: 0xc81e32,
+            CRIMSON_BRIGHT: 0xe12d39,
+            CRIMSON_DARK: 0x9b1626,
+            VERMILION: 0xe8482c,
+            GOLD_BRIGHT: 0xfbbf24,
+            GOLD_RICH: 0xd97706,
+            PLASTER_WHITE: 0xf4f1ea,
+            PLASTER_CREAM: 0xe6dec8,
+            TIMBER_DARK: 0x3b2416,
+            TIMBER_MID: 0x543422,
+            TIMBER_WARM: 0x784b31,
+            WOOD_BRIDGE: 0x8f5638,
+            ROOF_SLATE_A: 0x1f2937,
+            ROOF_SLATE_B: 0x283548,
+            ROOF_INDIGO: 0x253858,
+            ROOF_TEAL: 0x1f4e5b,
+            ROOF_THATCH: 0xb5945b,
+            ROOF_TERRACOTTA: 0x9e4736,
+
+            // Emissive Lanterns & Shoji
+            GLOW_WARM: 0xffd166,
+            GLOW_ORANGE: 0xff9f1c,
+            GLOW_RED_LANTERN: 0xff5a36,
+
+            // Sakura (Cherry Blossoms)
+            SAKURA_DEEP: 0xf472b6,
+            SAKURA_PINK: 0xf9a8d4,
+            SAKURA_PALE: 0xfce7f3,
+            SAKURA_WHITE: 0xfff5f8,
+            SAKURA_TRUNK: 0x4a3228,
+
+            // Maple, Bamboo & Pine
+            MAPLE_RED: 0xd93829,
+            MAPLE_ORANGE: 0xed6a2c,
+            MAPLE_GOLD: 0xf59e0b,
+            PINE_DARK: 0x1e4631,
+            PINE_MID: 0x2b5e41,
+            BAMBOO_STALK: 0x65a34e,
+            BAMBOO_NODE: 0x84bd68,
+            BAMBOO_LEAF: 0x4d8b3b
+        };
+
+        // ============================================================================
+        // 2. SPATIAL VOXEL STORAGE ENGINE (Supports Overwriting & Hidden-Face Culling)
+        // ============================================================================
+        // World bounds: X in [-70, 70], Z in [-70, 70], Y in [-5, 68]
+        const WORLD_RADIUS = 68;
+        const solidVoxels = new Map();     // key -> color hex
+        const emissiveVoxels = new Map();  // key -> color hex
+        const waterVoxels = new Map();     // key -> { x, y, z, color, foam }
+
+        // Pack (x, y, z) integers into a unique fast integer key
+        // Range: x,z in [-128, 127], y in [-32, 127]
+        function packKey(x, y, z) {
+            return ((x + 128) & 0xff) | (((z + 128) & 0xff) << 8) | (((y + 32) & 0xff) << 16);
+        }
+        function unpackKey(key) {
+            return {
+                x: (key & 0xff) - 128,
+                z: ((key >> 8) & 0xff) - 128,
+                y: ((key >> 16) & 0xff) - 32
+            };
+        }
+
+        function setVoxel(x, y, z, color, jitter = 0.03) {
+            x = Math.round(x); y = Math.round(y); z = Math.round(z);
+            if (x < -WORLD_RADIUS || x > WORLD_RADIUS || z < -WORLD_RADIUS || z > WORLD_RADIUS || y < -8 || y > 80) return;
+            const k = packKey(x, y, z);
+            emissiveVoxels.delete(k);
+            waterVoxels.delete(k);
+            solidVoxels.set(k, jitter > 0 ? jitterHex(color, jitter) : color);
+        }
+
+        function setEmissiveVoxel(x, y, z, color) {
+            x = Math.round(x); y = Math.round(y); z = Math.round(z);
+            if (x < -WORLD_RADIUS || x > WORLD_RADIUS || z < -WORLD_RADIUS || z > WORLD_RADIUS) return;
+            const k = packKey(x, y, z);
+            solidVoxels.delete(k);
+            waterVoxels.delete(k);
+            emissiveVoxels.set(k, color);
+        }
+
+        function setWaterVoxel(x, y, z, color, isFoam = false) {
+            x = Math.round(x); y = Math.round(y); z = Math.round(z);
+            if (x < -WORLD_RADIUS || x > WORLD_RADIUS || z < -WORLD_RADIUS || z > WORLD_RADIUS) return;
+            const k = packKey(x, y, z);
+            solidVoxels.delete(k);
+            emissiveVoxels.delete(k);
+            waterVoxels.set(k, { x, y, z, color: jitterHex(color, 0.02), isFoam });
+        }
+
+        function removeVoxel(x, y, z) {
+            const k = packKey(Math.round(x), Math.round(y), Math.round(z));
+            solidVoxels.delete(k);
+            emissiveVoxels.delete(k);
+            waterVoxels.delete(k);
+        }
+
+        function fillBox(x1, y1, z1, x2, y2, z2, color, jitter = 0.03) {
+            const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+            const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+            const minZ = Math.min(z1, z2), maxZ = Math.max(z1, z2);
+            for (let x = minX; x <= maxX; x++) {
+                for (let y = minY; y <= maxY; y++) {
+                    for (let z = minZ; z <= maxZ; z++) {
+                        setVoxel(x, y, z, color, jitter);
+                    }
+                }
+            }
+        }
+
+        // ============================================================================
+        // 3. GEOGRAPHY & RIVER PATH DEFINITIONS
+        // ============================================================================
+        // River centerline function: given Z in [-68, 68], returns river center X and width
+        function getRiverInfo(z) {
+            // Winding S-curve diagonal from NW (-36, -55) through center (-4, 0) to SE (38, 68)
+            const t = (z + 68) / 136; // 0 at North, 1 at South
+            const baseCurve = -36 + t * 72 + Math.sin(z * 0.065) * 11.5 + Math.cos(z * 0.035) * 6.0;
+            const width = 5.8 + Math.sin(z * 0.08 + 1.2) * 1.4 + (z < -35 ? 3.2 : 0); // Wider at NW waterfall lagoon
+            return { centerX: baseCurve, width };
+        }
+
+        // Ground height map function for any (x, z)
+        const terrainHeightCache = new Map();
+        function getGroundHeight(x, z) {
+            const ck = ((x + 128) & 0xff) | (((z + 128) & 0xff) << 8);
+            if (terrainHeightCache.has(ck)) return terrainHeightCache.get(ck);
+
+            let h = 1;
+
+            // 1. Sanctuary Plateau in North-East (X: 6..52, Z: -52..-6)
+            if (x >= 6 && x <= 52 && z >= -52 && z <= -6) {
+                const dx = Math.min(x - 6, 52 - x);
+                const dz = Math.min(z - (-52), -6 - z);
+                const edgeDist = Math.min(dx, dz);
+                if (edgeDist >= 3) {
+                    h = 8; // Upper sanctuary courtyard
+                } else {
+                    h = 4 + edgeDist;
+                }
+            }
+
+            // 2. North-West Mountain & Waterfall Cliff (X: -68..-10, Z: -68..-20)
+            const distNW = Math.hypot((x - (-48)) * 0.85, (z - (-52)) * 0.95);
+            if (distNW < 38) {
+                const mountFactor = Math.max(0, 1 - distNW / 38);
+                const noiseVal = fbm(x + 100, z + 100);
+                // Carve waterfall channel around x = -36, z = -52..-36
+                const wfDist = Math.abs(x - (-36 + Math.sin(z * 0.1) * 2));
+                let cliffH = Math.floor(Math.pow(mountFactor, 1.35) * 28 + noiseVal * 6);
+                if (wfDist < 3.8 && z > -56 && z < -30) {
+                    cliffH = Math.max(2, Math.floor(cliffH * 0.55));
+                }
+                h = Math.max(h, 1 + cliffH);
+            }
+
+            // 3. Gentle rolling garden hills in East & South-West corners
+            const hillNoise = fbm(x, z);
+            if (x > 46 && z > 0) {
+                h = Math.max(h, 1 + Math.floor(hillNoise * 4.5));
+            }
+            if (x < -46 && z > 20) {
+                h = Math.max(h, 1 + Math.floor(hillNoise * 5.5));
+            }
+
+            // 4. Carve the Winding Riverbed
+            const river = getRiverInfo(z);
+            const distToRiver = Math.abs(x - river.centerX);
+            if (distToRiver < river.width) {
+                h = -2; // Riverbed depth
+            } else if (distToRiver < river.width + 2.2 && h < 5) {
+                h = 0; // Gentle riverbank shoreline
+            }
+
+            terrainHeightCache.set(ck, h);
+            return h;
+        }
+
+        // Check if (x,z) is a cobblestone road / pathway
+        function isPathway(x, z) {
+            // 1. Main Avenue from Village West (-56, 4) across Drum Bridge (-4, 0) to Pagoda South Stairs (28, -6)
+            const mainZ = Math.sin(x * 0.05) * 2.5;
+            if (x >= -58 && x <= 30 && Math.abs(z - mainZ) <= 2.3) return true;
+
+            // 2. North-South Market Street (X around -22, Z from -12 to +58)
+            const marketX = -22 + Math.sin(z * 0.06) * 2.2;
+            if (z >= -12 && z <= 60 && Math.abs(x - marketX) <= 2.4) return true;
+
+            // 3. Southern Village Loop & Bridge Approach (Z around +34, X from -48 to +45)
+            const southZ = 34 + Math.cos(x * 0.05) * 2.0;
+            if (x >= -48 && x <= 46 && Math.abs(z - southZ) <= 2.0) return true;
+
+            // 4. Eastern Garden Path connecting South Bridge (38, 34) up to Sanctuary East Stair (28, -6)
+            const eastX = 36 + Math.sin(z * 0.08) * 3.0;
+            if (z >= -6 && z <= 36 && Math.abs(x - eastX) <= 1.8) return true;
+
+            return false;
+        }
+
+        // ============================================================================
+        // 4. WORLD STRUCTURE BUILDERS (Pagoda, Houses, Bridges, Trees, Lanterns)
+        // ============================================================================
+
+        // Build Terrain Base, Diorama Rim, River Water & Sanctuary Retaining Walls
+        function buildTerrainAndRiver() {
+            const R = WORLD_RADIUS;
+            for (let x = -R; x <= R; x++) {
+                for (let z = -R; z <= R; z++) {
+                    const topY = getGroundHeight(x, z);
+                    const isEdge = (x === -R || x === R || z === -R || z === R);
+
+                    // Diorama dark basalt base box at the outer border
+                    const bottomY = isEdge ? -4 : Math.min(topY - 2, -2);
+                    for (let y = bottomY; y <= topY; y++) {
+                        if (isEdge && y < topY) {
+                            setVoxel(x, y, z, y < -1 ? PALETTE.BASALT_DARK : PALETTE.EARTH_BROWN, 0.02);
+                            continue;
+                        }
+                        if (y < topY) {
+                            // Exposed cliff or sanctuary wall sides
+                            if (x >= 6 && x <= 52 && z >= -52 && z <= -6 && topY >= 5) {
+                                setVoxel(x, y, z, (y % 3 === 0) ? PALETTE.STONE_DARK : PALETTE.STONE_MID, 0.03);
+                            } else if (topY >= 6) {
+                                setVoxel(x, y, z, (y + x) % 4 === 0 ? PALETTE.MOSS_GREEN : PALETTE.STONE_DARK, 0.04);
+                            } else {
+                                setVoxel(x, y, z, PALETTE.EARTH_BROWN, 0.02);
+                            }
+                        } else {
+                            // Surface layer at y === topY
+                            if (topY < 0) {
+                                // Riverbed gravel & stones
+                                setVoxel(x, y, z, rand() < 0.3 ? PALETTE.STONE_MID : PALETTE.DIRT_WARM, 0.04);
+                            } else if (x >= 9 && x <= 49 && z >= -49 && z <= -9 && topY === 8) {
+                                // Sanctuary upper courtyard paving & moss garden
+                                const inPavedCross = (Math.abs(x - 28) <= 3 || Math.abs(z - (-28)) <= 3 ||
+                                    (Math.abs(x - 28) <= 13 && Math.abs(z - (-28)) <= 13));
+                                if (inPavedCross) {
+                                    const checker = (x + z) % 2 === 0;
+                                    setVoxel(x, y, z, checker ? PALETTE.STONE_LIGHT : PALETTE.STONE_MID, 0.02);
+                                } else {
+                                    setVoxel(x, y, z, rand() < 0.35 ? PALETTE.MOSS_GREEN : PALETTE.GRASS_LUSH, 0.03);
+                                }
+                            } else if (isPathway(x, z) && topY >= 0 && topY <= 3) {
+                                // Cobblestone village pathways
+                                const pCol = rand() < 0.15 ? PALETTE.COBBLE_MOSS : (rand() < 0.5 ? PALETTE.COBBLE_A : PALETTE.COBBLE_B);
+                                setVoxel(x, y, z, pCol, 0.03);
+                            } else if (topY === 0) {
+                                // Riverbank pebbles and sand
+                                setVoxel(x, y, z, rand() < 0.6 ? PALETTE.SAND_GRAVEL : PALETTE.GRASS_LUSH, 0.03);
+                            } else if (topY >= 14) {
+                                // High mountain rock & alpine moss
+                                setVoxel(x, y, z, rand() < 0.45 ? PALETTE.STONE_MID : PALETTE.MOSS_GREEN, 0.04);
+                            } else {
+                                // Lush multi-tone garden grass
+                                const n = smoothNoise(x * 0.15, z * 0.15);
+                                const gCol = n < 0.35 ? PALETTE.GRASS_LUSH : (n < 0.7 ? PALETTE.GRASS_MID : PALETTE.GRASS_BRIGHT);
+                                setVoxel(x, y, z, gCol, 0.03);
+                                // Occasional wildflowers & garden pebbles
+                                if (rand() < 0.018 && !isPathway(x, z)) {
+                                    setVoxel(x, y + 1, z, pick([PALETTE.SAKURA_PINK, PALETTE.GOLD_BRIGHT, PALETTE.SAKURA_WHITE]), 0.02);
+                                }
+                            }
+                        }
+                    }
+
+                    // Fill River Water at Y = 0
+                    if (topY < 0) {
+                        const river = getRiverInfo(z);
+                        const dist = Math.abs(x - river.centerX);
+                        const isEdgeFoam = dist > river.width - 1.2 && rand() < 0.35;
+                        setWaterVoxel(x, 0, z, isEdgeFoam ? PALETTE.WATER_FOAM : (dist < 2.2 ? PALETTE.WATER_DEEP : PALETTE.WATER_SHALLOW), isEdgeFoam);
+                    }
+                }
+            }
+
+            // Build Cascading Waterfall on the NW Mountain Cliff (-36, -52 to -34)
+            for (let z = -54; z <= -32; z++) {
+                const centerX = -36 + Math.sin(z * 0.1) * 1.5;
+                for (let dx = -2; dx <= 2; dx++) {
+                    const wx = Math.round(centerX + dx);
+                    const cliffY = getGroundHeight(wx, z);
+                    const nextY = getGroundHeight(wx, z + 1);
+                    for (let y = Math.max(1, nextY); y <= Math.max(cliffY + 1, 2); y++) {
+                        const isFoam = (y <= 2 || rand() < 0.35);
+                        setWaterVoxel(wx, y, z, isFoam ? PALETTE.WATER_FOAM : PALETTE.WATER_SHALLOW, isFoam);
+                    }
+                }
+            }
+
+            // Build Sanctuary Grand Stone Staircases (South Entrance at X=28, Z=-9..-3; West Entrance at X=3..9, Z=-28)
+            // South Staircase
+            for (let step = 0; step <= 7; step++) {
+                const sz = -10 + step;
+                const sy = 8 - step;
+                for (let sx = 24; sx <= 32; sx++) {
+                    fillBox(sx, 1, sz, sx, sy, sz, PALETTE.STONE_LIGHT, 0.02);
+                    // Side balustrades
+                    if (sx === 24 || sx === 32) {
+                        setVoxel(sx, sy + 1, sz, PALETTE.STONE_DARK, 0.02);
+                        if (step === 0 || step === 7) {
+                            setVoxel(sx, sy + 2, sz, PALETTE.CRIMSON_MAIN, 0.02);
+                        }
+                    }
+                }
+            }
+            // West Staircase (connects directly to Main Avenue & Drum Bridge)
+            for (let step = 0; step <= 7; step++) {
+                const sx = 10 - step;
+                const sy = 8 - step;
+                for (let sz = -4; sz <= 2; sz++) {
+                    // Connect smoothly near SW corner of plateau
+                }
+            }
+            // Let's also build a grand West Staircase at Z = -18, X = 3..10
+            for (let step = 0; step <= 7; step++) {
+                const sx = 10 - step;
+                const sy = 8 - step;
+                for (let sz = -21; sz <= -15; sz++) {
+                    fillBox(sx, 1, sz, sx, sy, sz, PALETTE.STONE_LIGHT, 0.02);
+                    if (sz === -21 || sz === -15) {
+                        setVoxel(sx, sy + 1, sz, PALETTE.STONE_DARK, 0.02);
+                    }
+                }
+            }
+            // Connect South Stairs (28, -2) to Main Avenue (28, 0) with stone plaza
+            for (let x = 22; x <= 34; x++) {
+                for (let z = -3; z <= 3; z++) {
+                    const gy = Math.max(1, getGroundHeight(x, z));
+                    setVoxel(x, gy, z, (x + z) % 2 === 0 ? PALETTE.STONE_LIGHT : PALETTE.COBBLE_B, 0.02);
+                }
+            }
+        }
+
+        // ============================================================================
+        // 5. THE GRAND 5-TIER CRIMSON & GOLD PAGODA (Center: X=28, Y=8, Z=-28)
+        // ============================================================================
+        function buildGrandPagoda(cx, baseY, cz) {
+            // 1. Raised Double-Tier Stone Foundation Platform (Radius 11 -> 9)
+            fillBox(cx - 11, baseY + 1, cz - 11, cx + 11, baseY + 2, cz + 11, PALETTE.STONE_MID, 0.02);
+            fillBox(cx - 10, baseY + 3, cz - 10, cx + 10, baseY + 3, cz + 10, PALETTE.STONE_PALE, 0.02);
+            // Dark timber trim under veranda
+            fillBox(cx - 9, baseY + 2, cz - 9, cx + 9, baseY + 2, cz + 9, PALETTE.TIMBER_DARK, 0.02);
+
+            // Steps on all 4 cardinal directions
+            for (let s = 0; s < 3; s++) {
+                for (let w = -2; w <= 2; w++) {
+                    // South, North, East, West steps
+                    fillBox(cx + w, baseY + 1, cz + 11 + s, cx + w, baseY + 3 - s, cz + 11 + s, PALETTE.STONE_PALE, 0.01);
+                    fillBox(cx + w, baseY + 1, cz - 11 - s, cx + w, baseY + 3 - s, cz - 11 - s, PALETTE.STONE_PALE, 0.01);
+                    fillBox(cx + 11 + s, baseY + 1, cz + w, cx + 11 + s, baseY + 3 - s, cz + w, PALETTE.STONE_PALE, 0.01);
+                    fillBox(cx - 11 - s, baseY + 1, cz + w, cx - 11 - s, baseY + 3 - s, cz + w, PALETTE.STONE_PALE, 0.01);
+                }
+            }
+
+            // Crimson veranda railing around foundation platform
+            const railR = 10;
+            for (let i = -railR; i <= railR; i++) {
+                if (Math.abs(i) > 2) {
+                    setVoxel(cx + i, baseY + 4, cz + railR, PALETTE.CRIMSON_MAIN, 0.01);
+                    setVoxel(cx + i, baseY + 4, cz - railR, PALETTE.CRIMSON_MAIN, 0.01);
+                    setVoxel(cx + railR, baseY + 4, cz + i, PALETTE.CRIMSON_MAIN, 0.01);
+                    setVoxel(cx - railR, baseY + 4, cz + i, PALETTE.CRIMSON_MAIN, 0.01);
+                }
+            }
+            // Gold caps on corner railing posts
+            for (const dx of [-railR, railR]) {
+                for (const dz of [-railR, railR]) {
+                    setVoxel(cx + dx, baseY + 5, cz + dz, PALETTE.GOLD_BRIGHT, 0.01);
+                }
+            }
+
+            // 2. Build 5 Diminishing Architectural Tiers
+            const tiers = [
+                { coreR: 7, roofR: 12, wallH: 6 },
+                { coreR: 6, roofR: 11, wallH: 5 },
+                { coreR: 5, roofR: 10, wallH: 5 },
+                { coreR: 4, roofR: 8,  wallH: 4 },
+                { coreR: 3, roofR: 7,  wallH: 4 }
+            ];
+
+            let curY = baseY + 4;
+
+            for (let t = 0; t < tiers.length; t++) {
+                const { coreR, roofR, wallH } = tiers[t];
+
+                // Build Walls, Crimson Columns, and Glowing Shoji Windows
+                for (let y = 0; y < wallH; y++) {
+                    const wy = curY + y;
+                    for (let dx = -coreR; dx <= coreR; dx++) {
+                        for (let dz = -coreR; dz <= coreR; dz++) {
+                            const onBoundary = (Math.abs(dx) === coreR || Math.abs(dz) === coreR);
+                            if (!onBoundary) continue;
+
+                            const isCorner = (Math.abs(dx) === coreR && Math.abs(dz) === coreR);
+                            const isPillar = (dx % 2 === 0 && Math.abs(dz) === coreR) || (dz % 2 === 0 && Math.abs(dx) === coreR);
+                            const isDoorway = (t === 0 && y < 4 && (Math.abs(dx) <= 1 || Math.abs(dz) <= 1));
+
+                            if (isCorner || y === 0 || y === wallH - 1) {
+                                setVoxel(cx + dx, wy, cz + dz, PALETTE.CRIMSON_MAIN, 0.02);
+                            } else if (isDoorway) {
+                                setEmissiveVoxel(cx + dx, wy, cz + dz, PALETTE.GLOW_WARM);
+                            } else if (isPillar) {
+                                setVoxel(cx + dx, wy, cz + dz, PALETTE.CRIMSON_DARK, 0.02);
+                            } else if (y >= 1 && y <= wallH - 2) {
+                                // Glowing warm lattice window
+                                setEmissiveVoxel(cx + dx, wy, cz + dz, PALETTE.GLOW_WARM);
+                            } else {
+                                setVoxel(cx + dx, wy, cz + dz, PALETTE.PLASTER_WHITE, 0.02);
+                            }
+                        }
+                    }
+                }
+
+                // Balcony Railing for upper tiers
+                if (t > 0) {
+                    const balR = coreR + 1;
+                    for (let i = -balR; i <= balR; i++) {
+                        setVoxel(cx + i, curY, cz + balR, PALETTE.CRIMSON_BRIGHT, 0.01);
+                        setVoxel(cx + i, curY, cz - balR, PALETTE.CRIMSON_BRIGHT, 0.01);
+                        setVoxel(cx + balR, curY, cz + i, PALETTE.CRIMSON_BRIGHT, 0.01);
+                        setVoxel(cx - balR, curY, cz + i, PALETTE.CRIMSON_BRIGHT, 0.01);
+                    }
+                }
+
+                // Intricate Brackets (Dougong) under the roof eaves
+                const bracketY = curY + wallH;
+                fillBox(cx - (coreR + 1), bracketY, cz - (coreR + 1), cx + (coreR + 1), bracketY, cz + (coreR + 1), PALETTE.CRIMSON_BRIGHT, 0.02);
+                for (let i = -(coreR + 1); i <= (coreR + 1); i += 2) {
+                    setVoxel(cx + i, bracketY, cz + coreR + 2, PALETTE.GOLD_BRIGHT, 0.01);
+                    setVoxel(cx + i, bracketY, cz - coreR - 2, PALETTE.GOLD_BRIGHT, 0.01);
+                    setVoxel(cx + coreR + 2, bracketY, cz + i, PALETTE.GOLD_BRIGHT, 0.01);
+                    setVoxel(cx - coreR - 2, bracketY, cz + i, PALETTE.GOLD_BRIGHT, 0.01);
+                }
+
+                // Multi-layered Curved Japanese Pagoda Roof with upturned corners
+                const roofBaseY = bracketY + 1;
+                const roofLayers = 4;
+                for (let layer = 0; layer < roofLayers; layer++) {
+                    const r = roofR - layer * 1;
+                    const ry = roofBaseY + layer;
+                    for (let dx = -r; dx <= r; dx++) {
+                        for (let dz = -r; dz <= r; dz++) {
+                            const maxAxis = Math.max(Math.abs(dx), Math.abs(dz));
+                            if (maxAxis < coreR - 1 && layer < roofLayers - 1) continue;
+
+                            // Upturned corner curve calculation
+                            const cornerDist = (Math.abs(dx) * Math.abs(dz)) / (r * r);
+                            const lift = (layer === 0 && cornerDist > 0.55) ? 1 : 0;
+
+                            // Alternating roof tile ribs
+                            const isRib = (dx + dz) % 2 === 0;
+                            const isDiagonalRidge = Math.abs(Math.abs(dx) - Math.abs(dz)) <= 1 && maxAxis >= coreR;
+                            let tileCol = isRib ? PALETTE.ROOF_SLATE_A : PALETTE.ROOF_SLATE_B;
+                            if (isDiagonalRidge && maxAxis === r) {
+                                tileCol = PALETTE.GOLD_BRIGHT;
+                            }
+
+                            setVoxel(cx + dx, ry + lift, cz + dz, tileCol, 0.02);
+
+                            // Crimson underside rafters on lowest roof layer
+                            if (layer === 0 && maxAxis === r) {
+                                setVoxel(cx + dx, ry + lift - 1, cz + dz, PALETTE.CRIMSON_MAIN, 0.02);
+                            }
+                        }
+                    }
+                }
+
+                // Hanging Golden Wind-Bells (Furin) at the 4 corners of every tier's roof
+                for (const sx of [-roofR, roofR]) {
+                    for (const sz of [-roofR, roofR]) {
+                        setVoxel(cx + sx, roofBaseY + 2, cz + sz, PALETTE.GOLD_BRIGHT, 0);
+                        setVoxel(cx + sx, roofBaseY - 1, cz + sz, PALETTE.GOLD_RICH, 0);
+                        setEmissiveVoxel(cx + sx, roofBaseY - 2, cz + sz, PALETTE.GLOW_WARM);
+                    }
+                }
+
+                curY = roofBaseY + roofLayers;
+            }
+
+            // 3. Golden Sorin Spire Finial at the Peak of the 5th Tier
+            fillBox(cx - 2, curY, cz - 2, cx + 2, curY + 1, cz + 2, PALETTE.GOLD_RICH, 0.01);
+            for (let sy = 0; sy <= 11; sy++) {
+                setVoxel(cx, curY + 2 + sy, cz, PALETTE.GOLD_BRIGHT, 0.01);
+                // Nine rings (Kurin) represented by alternating wider gold discs
+                if (sy % 2 === 1 && sy <= 7) {
+                    setVoxel(cx + 1, curY + 2 + sy, cz, PALETTE.GOLD_BRIGHT, 0.01);
+                    setVoxel(cx - 1, curY + 2 + sy, cz, PALETTE.GOLD_BRIGHT, 0.01);
+                    setVoxel(cx, curY + 2 + sy, cz + 1, PALETTE.GOLD_BRIGHT, 0.01);
+                    setVoxel(cx, curY + 2 + sy, cz - 1, PALETTE.GOLD_BRIGHT, 0.01);
+                }
+            }
+            // Glowing Jewel (Hoju) at the very apex
+            setEmissiveVoxel(cx, curY + 14, cz, PALETTE.GLOW_WARM);
+        }
+
+        // ============================================================================
+        // 6. TORII GATES, STONE LANTERNS, ARCHED BRIDGES & WATERWHEEL MILL
+        // ============================================================================
+        function buildToriiGate(cx, baseY, cz, axis = 'z', scale = 1) {
+            const pillarOffset = Math.round(3 * scale);
+            const height = Math.round(9 * scale);
+            const topSpan = Math.round(5 * scale);
+
+            for (const side of [-pillarOffset, pillarOffset]) {
+                const px = axis === 'z' ? cx + side : cx;
+                const pz = axis === 'z' ? cz : cz + side;
+                // Black stone pedestal base
+                fillBox(px, baseY, pz, px, baseY + 1, pz, PALETTE.BASALT_DARK, 0.01);
+                // Vermilion pillars
+                fillBox(px, baseY + 2, pz, px, baseY + height, pz, PALETTE.CRIMSON_BRIGHT, 0.02);
+            }
+
+            // Lower tie beam (Nuki)
+            const nukiY = baseY + height - 2;
+            // Upper lintel (Kasagi) with upturned ends
+            const kasagiY = baseY + height;
+
+            for (let s = -topSpan; s <= topSpan; s++) {
+                const bx = axis === 'z' ? cx + s : cx;
+                const bz = axis === 'z' ? cz : cz + s;
+                const curve = Math.abs(s) >= topSpan - 1 ? 1 : 0;
+
+                if (Math.abs(s) <= pillarOffset + 1) {
+                    setVoxel(bx, nukiY, bz, PALETTE.CRIMSON_MAIN, 0.01);
+                }
+                setVoxel(bx, kasagiY + curve, bz, PALETTE.CRIMSON_BRIGHT, 0.01);
+                setVoxel(bx, kasagiY + curve + 1, bz, PALETTE.ROOF_SLATE_A, 0.01);
+            }
+            // Gold tablet plaque in center
+            setVoxel(cx, nukiY + 1, cz, PALETTE.GOLD_BRIGHT, 0.01);
+        }
+
+        function buildStoneLantern(x, baseY, z) {
+            setVoxel(x, baseY + 1, z, PALETTE.STONE_DARK, 0.02);
+            setVoxel(x, baseY + 2, z, PALETTE.STONE_MID, 0.02);
+            setEmissiveVoxel(x, baseY + 3, z, PALETTE.GLOW_WARM);
+            // Hat roof
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    if (Math.abs(dx) + Math.abs(dz) <= 1) {
+                        setVoxel(x + dx, baseY + 4, z + dz, PALETTE.STONE_MID, 0.02);
+                    }
+                }
+            }
+            setVoxel(x, baseY + 5, z, PALETTE.STONE_LIGHT, 0.02);
+        }
+
+        function buildArchedBridge(cx, cz, span = 16, width = 3, isCrimson = true) {
+            const halfSpan = Math.floor(span / 2);
+            for (let dx = -halfSpan; dx <= halfSpan; dx++) {
+                const norm = dx / halfSpan; // -1 to 1
+                const archH = Math.round((1 - norm * norm) * (isCrimson ? 4.4 : 2.8));
+                const deckY = 1 + archH;
+
+                for (let dz = -width; dz <= width; dz++) {
+                    // Remove any overlapping path voxels underneath
+                    // Wooden bridge deck
+                    setVoxel(cx + dx, deckY, cz + dz, isCrimson ? PALETTE.TIMBER_WARM : PALETTE.WOOD_BRIDGE, 0.02);
+                    // Under-arch structural beam
+                    setVoxel(cx + dx, deckY - 1, cz + dz, PALETTE.TIMBER_DARK, 0.02);
+
+                    // Bridge railings on both sides
+                    if (Math.abs(dz) === width) {
+                        setVoxel(cx + dx, deckY + 1, cz + dz, isCrimson ? PALETTE.CRIMSON_BRIGHT : PALETTE.TIMBER_MID, 0.02);
+                        if (dx % 3 === 0 || Math.abs(dx) === halfSpan) {
+                            setVoxel(cx + dx, deckY + 2, cz + dz, isCrimson ? PALETTE.CRIMSON_MAIN : PALETTE.TIMBER_DARK, 0.02);
+                            if (isCrimson) {
+                                setVoxel(cx + dx, deckY + 3, cz + dz, PALETTE.GOLD_BRIGHT, 0.01);
+                            }
+                        }
+                    }
+                }
+
+                // Support piers in the water
+                if (Math.abs(dx) === Math.floor(halfSpan * 0.55)) {
+                    for (let py = -2; py < deckY; py++) {
+                        setVoxel(cx + dx, py, cz - width + 1, PALETTE.TIMBER_DARK, 0.01);
+                        setVoxel(cx + dx, py, cz + width - 1, PALETTE.TIMBER_DARK, 0.01);
+                    }
+                }
+            }
+        }
+
+        // ============================================================================
+        // 7. TRADITIONAL JAPANESE HOUSES, TEA PAVILIONS & MARKET STALLS
+        // ============================================================================
+        function buildTraditionalHouse(cx, cz, w, d, h, roofColor, axis = 'x', hasSecondFloor = false) {
+            const baseY = Math.max(1, getGroundHeight(cx, cz));
+
+            // Level Stone Foundation Pad
+            fillBox(cx - w - 1, 0, cz - d - 1, cx + w + 1, baseY, cz + d + 1, PALETTE.STONE_MID, 0.02);
+            // Wooden Engawa Porch around perimeter
+            fillBox(cx - w - 1, baseY + 1, cz - d - 1, cx + w + 1, baseY + 1, cz + d + 1, PALETTE.TIMBER_WARM, 0.02);
+
+            // First Floor Walls
+            for (let y = 1; y <= h; y++) {
+                const wy = baseY + 1 + y;
+                for (let dx = -w; dx <= w; dx++) {
+                    for (let dz = -d; dz <= d; dz++) {
+                        if (Math.abs(dx) !== w && Math.abs(dz) !== d) continue;
+                        const isCorner = (Math.abs(dx) === w && Math.abs(dz) === d);
+                        const isBeam = (y === 1 || y === h || dx % 3 === 0 || dz % 3 === 0);
+                        const isWindow = (y >= 2 && y <= h - 1 && (Math.abs(dx) <= 1 || Math.abs(dz) <= 1));
+
+                        if (isCorner || isBeam) {
+                            setVoxel(cx + dx, wy, cz + dz, PALETTE.TIMBER_DARK, 0.02);
+                        } else if (isWindow) {
+                            setEmissiveVoxel(cx + dx, wy, cz + dz, PALETTE.GLOW_WARM);
+                        } else {
+                            setVoxel(cx + dx, wy, cz + dz, PALETTE.PLASTER_CREAM, 0.02);
+                        }
+                    }
+                }
+            }
+
+            let roofStartY = baseY + 2 + h;
+
+            // Optional Second Story Loft (Machiya townhouse style)
+            if (hasSecondFloor) {
+                const w2 = Math.max(2, w - 1);
+                const d2 = Math.max(2, d - 1);
+                // Skirt roof over 1st floor
+                for (let dx = -(w + 2); dx <= (w + 2); dx++) {
+                    for (let dz = -(d + 2); dz <= (d + 2); dz++) {
+                        if (Math.abs(dx) >= w || Math.abs(dz) >= d) {
+                            setVoxel(cx + dx, roofStartY, cz + dz, roofColor, 0.02);
+                        }
+                    }
+                }
+                for (let y = 1; y <= 3; y++) {
+                    const wy = roofStartY + y;
+                    for (let dx = -w2; dx <= w2; dx++) {
+                        for (let dz = -d2; dz <= d2; dz++) {
+                            if (Math.abs(dx) !== w2 && Math.abs(dz) !== d2) continue;
+                            const isCorner = (Math.abs(dx) === w2 && Math.abs(dz) === d2);
+                            if (isCorner || y === 3) {
+                                setVoxel(cx + dx, wy, cz + dz, PALETTE.TIMBER_DARK, 0.02);
+                            } else if (y === 2 && (dx === 0 || dz === 0)) {
+                                setEmissiveVoxel(cx + dx, wy, cz + dz, PALETTE.GLOW_WARM);
+                            } else {
+                                setVoxel(cx + dx, wy, cz + dz, PALETTE.PLASTER_WHITE, 0.02);
+                            }
+                        }
+                    }
+                }
+                roofStartY += 4;
+                w = w2;
+                d = d2;
+            }
+
+            // Gabled Irimoya Roof with Curved Ridge & White Plaster Gable
+            const roofSpan = (axis === 'x' ? d : w) + 2;
+            const ridgeLen = (axis === 'x' ? w : d) + 2;
+
+            for (let layer = 0; layer <= roofSpan; layer++) {
+                const curSpan = roofSpan - layer;
+                const ry = roofStartY + Math.floor(layer * 0.78);
+                const curLen = ridgeLen - (layer > 2 ? 1 : 0);
+
+                for (let l = -curLen; l <= curLen; l++) {
+                    for (let s = -curSpan; s <= curSpan; s++) {
+                        const rx = axis === 'x' ? cx + l : cx + s;
+                        const rz = axis === 'x' ? cz + s : cz + l;
+                        const onSlope = Math.abs(s) >= curSpan - 1 || curSpan === 0;
+                        const onGable = Math.abs(l) === curLen - 1;
+
+                        if (onSlope) {
+                            const endFlip = (Math.abs(l) === curLen && curSpan === 0) ? 1 : 0;
+                            const col = (curSpan === 0) ? PALETTE.STONE_PALE : roofColor;
+                            setVoxel(rx, ry + endFlip, rz, col, 0.025);
+                        } else if (onGable) {
+                            setVoxel(rx, ry, rz, PALETTE.PLASTER_WHITE, 0.02);
+                        }
+                    }
+                }
+            }
+
+            // Hanging red Chochin Lantern by the front entrance
+            const frontX = axis === 'x' ? cx : cx + w + 2;
+            const frontZ = axis === 'x' ? cz + d + 2 : cz;
+            setVoxel(frontX, baseY + h + 1, frontZ, PALETTE.TIMBER_DARK, 0.01);
+            setEmissiveVoxel(frontX, baseY + h, frontZ, PALETTE.GLOW_RED_LANTERN);
+        }
+
+        function buildMarketStall(cx, cz, awningColA, awningColB, axis = 'z') {
+            const baseY = Math.max(1, getGroundHeight(cx, cz));
+            const w = axis === 'z' ? 2 : 3;
+            const d = axis === 'z' ? 3 : 2;
+
+            // Counter table & wooden crates
+            fillBox(cx - w, baseY + 1, cz - d, cx + w, baseY + 1, cz + d, PALETTE.WOOD_BRIDGE, 0.02);
+            // Colorful wares on counter (apples, oranges, ceramics, fabrics)
+            const wareColors = [0xef4444, 0xf97316, 0xeab308, 0x22c55e, 0x38bdf8, 0xf472b6];
+            for (let dx = -w + 1; dx <= w - 1; dx++) {
+                for (let dz = -d + 1; dz <= d - 1; dz++) {
+                    if (rand() < 0.7) {
+                        setVoxel(cx + dx, baseY + 2, cz + dz, pick(wareColors), 0.02);
+                    }
+                }
+            }
+
+            // 4 corner bamboo/wood posts
+            for (const sx of [-w, w]) {
+                for (const sz of [-d, d]) {
+                    fillBox(cx + sx, baseY + 1, cz + sz, cx + sx, baseY + 4, cz + sz, PALETTE.TIMBER_MID, 0.02);
+                }
+            }
+
+            // Striped pitched fabric awning
+            for (let dx = -w - 1; dx <= w + 1; dx++) {
+                for (let dz = -d - 1; dz <= d + 1; dz++) {
+                    const stripe = ((axis === 'z' ? dz : dx) + 10) % 2 === 0;
+                    const ay = baseY + 5 + (Math.abs(axis === 'z' ? dx : dz) <= 1 ? 1 : 0);
+                    setVoxel(cx + dx, ay, cz + dz, stripe ? awningColA : awningColB, 0.02);
+                }
+            }
+
+            // Warm lantern under stall roof
+            setEmissiveVoxel(cx, baseY + 4, cz, PALETTE.GLOW_ORANGE);
+        }
+
+        // ============================================================================
+        // 8. VARIED FLORA: CHERRY BLOSSOMS, AUTUMN MAPLES, BAMBOO & PINES
+        // ============================================================================
+        const sakuraCanopyCenters = []; // Stored for spawning falling blossom petals
+
+        function buildSakuraTree(x, z, scale = 1.0) {
+            const baseY = getGroundHeight(x, z);
+            if (baseY < 1) return;
+
+            const trunkH = Math.round((7 + rand() * 4) * scale);
+            let curX = x, curZ = z;
+
+            // Gnarled root flare
+            for (const [rx, rz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+                if (rand() < 0.75) setVoxel(x + rx, baseY + 1, z + rz, PALETTE.SAKURA_TRUNK, 0.03);
+            }
+
+            // Leaning organic trunk
+            const leanX = (rand() - 0.5) * 0.45;
+            const leanZ = (rand() - 0.5) * 0.45;
+            for (let y = 1; y <= trunkH; y++) {
+                curX = x + leanX * y;
+                curZ = z + leanZ * y;
+                fillBox(Math.round(curX), baseY + y, Math.round(curZ), Math.round(curX) + (y < 4 ? 1 : 0), baseY + y, Math.round(curZ), PALETTE.SAKURA_TRUNK, 0.03);
+            }
+
+            // Branching limbs & lush billowy pink blossom clusters
+            const numBranches = 4 + Math.floor(scale * 3);
+            const sakuraColors = [PALETTE.SAKURA_DEEP, PALETTE.SAKURA_PINK, PALETTE.SAKURA_PALE, PALETTE.SAKURA_WHITE];
+
+            for (let b = 0; b < numBranches; b++) {
+                const angle = (b / numBranches) * Math.PI * 2 + randRange(-0.3, 0.3);
+                const len = (3.5 + rand() * 3.0) * scale;
+                const branchEndY = baseY + trunkH + randRange(0, 3 * scale);
+                const endX = curX + Math.cos(angle) * len;
+                const endZ = curZ + Math.sin(angle) * len;
+
+                // Draw wood branch line
+                const steps = Math.ceil(len * 1.5);
+                for (let s = 0; s <= steps; s++) {
+                    const t = s / steps;
+                    setVoxel(
+                        curX + (endX - curX) * t,
+                        baseY + trunkH - 1 + (branchEndY - (baseY + trunkH - 1)) * t,
+                        curZ + (endZ - curZ) * t,
+                        PALETTE.SAKURA_TRUNK, 0.02
+                    );
+                }
+
+                // Blossom cloud around branch tip
+                const rX = Math.round(3.2 * scale + rand() * 1.5);
+                const rY = Math.round(2.3 * scale + rand() * 0.8);
+                const rZ = Math.round(3.2 * scale + rand() * 1.5);
+                sakuraCanopyCenters.push({ x: endX, y: branchEndY, z: endZ, r: rX });
+
+                for (let dx = -rX; dx <= rX; dx++) {
+                    for (let dy = -rY; dy <= rY; dy++) {
+                        for (let dz = -rZ; dz <= rZ; dz++) {
+                            const dist = (dx * dx) / (rX * rX) + (dy * dy) / (rY * rY) + (dz * dz) / (rZ * rZ);
+                            if (dist <= 1.0 && rand() > dist * 0.32) {
+                                const col = dy > 0 ? pick([PALETTE.SAKURA_PINK, PALETTE.SAKURA_PALE, PALETTE.SAKURA_WHITE]) : pick(sakuraColors);
+                                setVoxel(endX + dx, branchEndY + dy, endZ + dz, col, 0.03);
+                            }
+                            // Hanging blossom tendrils below canopy
+                            if (dy === -rY && dist < 0.55 && rand() < 0.28) {
+                                setVoxel(endX + dx, branchEndY + dy - 1, endZ + dz, PALETTE.SAKURA_PINK, 0.02);
+                                if (rand() < 0.5) setVoxel(endX + dx, branchEndY + dy - 2, endZ + dz, PALETTE.SAKURA_PALE, 0.02);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Crown blossom cluster
+            const crownY = baseY + trunkH + Math.round(2.5 * scale);
+            const cr = Math.round(3.8 * scale);
+            for (let dx = -cr; dx <= cr; dx++) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    for (let dz = -cr; dz <= cr; dz++) {
+                        const d = (dx * dx + dz * dz) / (cr * cr) + (dy * dy) / 5;
+                        if (d <= 1.0 && rand() > 0.2) {
+                            setVoxel(curX + dx, crownY + dy, curZ + dz, pick(sakuraColors), 0.03);
+                        }
+                    }
+                }
+            }
+
+            // Scattered fallen pink petals around tree roots
+            for (let i = 0; i < 14; i++) {
+                const px = Math.round(x + randRange(-5, 5));
+                const pz = Math.round(z + randRange(-5, 5));
+                const py = getGroundHeight(px, pz);
+                if (py >= 1) {
+                    setVoxel(px, py, pz, pick([PALETTE.SAKURA_PINK, PALETTE.SAKURA_PALE]), 0.02);
+                }
+            }
+        }
+
+        function buildMapleTree(x, z, scale = 1.0) {
+            const baseY = getGroundHeight(x, z);
+            if (baseY < 1) return;
+            const trunkH = Math.round((6 + rand() * 3) * scale);
+            for (let y = 1; y <= trunkH; y++) {
+                setVoxel(x, baseY + y, z, PALETTE.TIMBER_DARK, 0.02);
+            }
+            const mapleCols = [PALETTE.MAPLE_RED, PALETTE.MAPLE_ORANGE, PALETTE.MAPLE_GOLD, PALETTE.CRIMSON_BRIGHT];
+            for (let layer = 0; layer < 3; layer++) {
+                const cy = baseY + trunkH - 1 + layer * 2;
+                const r = Math.round((4.2 - layer * 0.9) * scale);
+                for (let dx = -r; dx <= r; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dz = -r; dz <= r; dz++) {
+                            if (dx * dx + dz * dz <= r * r + randRange(-2, 2) && rand() < 0.78) {
+                                setVoxel(x + dx, cy + dy, z + dz, pick(mapleCols), 0.03);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function buildPineTree(x, z) {
+            const baseY = getGroundHeight(x, z);
+            if (baseY < 1) return;
+            const trunkH = 7 + randInt(0, 4);
+            for (let y = 1; y <= trunkH; y++) {
+                setVoxel(x, baseY + y, z, PALETTE.TIMBER_MID, 0.02);
+            }
+            // Layered horizontal cloud pads (Niwaki Japanese pruned pine style)
+            const pads = [
+                { ox: 0, oy: trunkH + 1, oz: 0, r: 3 },
+                { ox: -2, oy: trunkH - 1, oz: 1, r: 2.5 },
+                { ox: 2, oy: trunkH - 2, oz: -1, r: 2.5 },
+                { ox: 0, oy: trunkH - 3, oz: 2, r: 2 }
+            ];
+            for (const p of pads) {
+                setVoxel(x + Math.sign(p.ox), baseY + p.oy - 1, z + Math.sign(p.oz), PALETTE.TIMBER_MID, 0.02);
+                const r = Math.ceil(p.r);
+                for (let dx = -r; dx <= r; dx++) {
+                    for (let dz = -r; dz <= r; dz++) {
+                        if (dx * dx + dz * dz <= p.r * p.r) {
+                            setVoxel(x + p.ox + dx, baseY + p.oy, z + p.oz + dz, rand() < 0.5 ? PALETTE.PINE_DARK : PALETTE.PINE_MID, 0.02);
+                            if (dx * dx + dz * dz <= (p.r - 1) * (p.r - 1)) {
+                                setVoxel(x + p.ox + dx, baseY + p.oy + 1, z + p.oz + dz, PALETTE.PINE_MID, 0.02);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function buildBambooStalk(x, z) {
+            const baseY = getGroundHeight(x, z);
+            if (baseY < 1) return;
+            const h = 9 + randInt(0, 7);
+            for (let y = 1; y <= h; y++) {
+                const isNode = (y % 3 === 0);
+                setVoxel(x, baseY + y, z, isNode ? PALETTE.BAMBOO_NODE : PALETTE.BAMBOO_STALK, 0.02);
+                if (y > h - 5 && rand() < 0.55) {
+                    const lx = x + pick([-1, 1]);
+                    const lz = z + pick([-1, 1]);
+                    setVoxel(lx, baseY + y, lz, PALETTE.BAMBOO_LEAF, 0.03);
+                }
+            }
+        }
+
+        // ============================================================================
+        // 9. ASSEMBLE THE COMPLETE VOXEL WORLD
+        // ============================================================================
+        function buildCompleteWorld() {
+            // 1. Terrain, Cliffs, Waterfall & Winding River
+            buildTerrainAndRiver();
+
+            // 2. The Five-Tier Crimson Pagoda & Sanctuary Courtyard (Centered at 28, 8, -28)
+            buildGrandPagoda(28, 8, -28);
+
+            // Sanctuary Torii Gates
+            buildToriiGate(28, 1, -2, 'z', 1.15);   // Grand South Torii at base of stairs
+            buildToriiGate(28, 8, -12, 'z', 1.0);   // Upper Courtyard Torii
+            buildToriiGate(2, 1, -18, 'x', 1.0);    // West Sanctuary Torii
+            buildToriiGate(-44, getGroundHeight(-44, -48), -48, 'z', 0.9); // Mountain Summit Inari Torii
+
+            // Chozuya (Water Purification Pavilion) at (16, 8, -16)
+            fillBox(14, 9, -18, 18, 9, -14, PALETTE.STONE_MID, 0.02);
+            setWaterVoxel(16, 10, -16, PALETTE.WATER_SHALLOW, false);
+            for (const dx of [-2, 2]) {
+                for (const dz of [-2, 2]) {
+                    fillBox(16 + dx, 10, -16 + dz, 16 + dx, 13, -16 + dz, PALETTE.TIMBER_MID, 0.02);
+                }
+            }
+            fillBox(13, 14, -19, 19, 14, -13, PALETTE.ROOF_SLATE_A, 0.02);
+            fillBox(14, 15, -18, 18, 15, -14, PALETTE.ROOF_SLATE_B, 0.02);
+
+            // 3. Two Arched Bridges across the Koi River
+            const bridge1River = getRiverInfo(0);
+            buildArchedBridge(Math.round(bridge1River.centerX), 0, 16, 3, true); // Main Crimson Drum Bridge
+            const bridge2River = getRiverInfo(34);
+            buildArchedBridge(Math.round(bridge2River.centerX), 34, 14, 2, false); // Southern Wooden Village Bridge
+
+            // 4. Riverside Watermill House at (-22, -16)
+            buildTraditionalHouse(-22, -18, 4, 3, 4, PALETTE.ROOF_THATCH, 'x', false);
+
+            // 5. Bustling Traditional Village Houses (Varied styles, colors, and stories)
+            const villageHouses = [
+                { x: -46, z: 14, w: 5, d: 4, h: 4, roof: PALETTE.ROOF_SLATE_A, axis: 'x', loft: true },
+                { x: -46, z: -6, w: 4, d: 4, h: 4, roof: PALETTE.ROOF_INDIGO,  axis: 'z', loft: false },
+                { x: -34, z: 22, w: 5, d: 4, h: 4, roof: PALETTE.ROOF_TEAL,    axis: 'x', loft: true },
+                { x: -10, z: 20, w: 4, d: 5, h: 4, roof: PALETTE.ROOF_TERRACOTTA, axis: 'z', loft: false },
+                { x: -35, z: 46, w: 5, d: 4, h: 4, roof: PALETTE.ROOF_SLATE_B, axis: 'x', loft: true },
+                { x: -10, z: 48, w: 5, d: 4, h: 4, roof: PALETTE.ROOF_INDIGO,  axis: 'x', loft: false },
+                { x: -52, z: 44, w: 4, d: 4, h: 4, roof: PALETTE.ROOF_THATCH,  axis: 'z', loft: false },
+                { x: 4,   z: 48, w: 4, d: 4, h: 4, roof: PALETTE.ROOF_TEAL,    axis: 'x', loft: false },
+                { x: 50,  z: 22, w: 4, d: 4, h: 4, roof: PALETTE.ROOF_SLATE_A, axis: 'z', loft: true },
+                { x: 50,  z: 46, w: 5, d: 4, h: 4, roof: PALETTE.ROOF_TERRACOTTA, axis: 'x', loft: false }
+            ];
+            for (const vh of villageHouses) {
+                buildTraditionalHouse(vh.x, vh.z, vh.w, vh.d, vh.h, vh.roof, vh.axis, vh.loft);
+            }
+
+            // 6. Colorful Village Market Stalls along Market Street & Plaza
+            const stalls = [
+                { x: -28, z: 8,  c1: PALETTE.CRIMSON_BRIGHT, c2: PALETTE.PLASTER_WHITE, axis: 'z' },
+                { x: -15, z: 9,  c1: 0x2563eb,               c2: PALETTE.PLASTER_WHITE, axis: 'z' },
+                { x: -28, z: 30, c1: 0x16a34a,               c2: PALETTE.GOLD_BRIGHT,   axis: 'x' },
+                { x: -15, z: 29, c1: 0x9333ea,               c2: PALETTE.PLASTER_CREAM, axis: 'z' },
+                { x: -22, z: 54, c1: PALETTE.VERMILION,      c2: PALETTE.GOLD_BRIGHT,   axis: 'x' },
+                { x: 14,  z: 10, c1: PALETTE.SAKURA_DEEP,    c2: PALETTE.PLASTER_WHITE, axis: 'x' }
+            ];
+            for (const st of stalls) {
+                buildMarketStall(st.x, st.z, st.c1, st.c2, st.axis);
+            }
+
+            // 7. Overhead Festival Lantern Garlands across Market Street
+            for (let z = 6; z <= 42; z += 9) {
+                const by = Math.max(1, getGroundHeight(-22, z));
+                fillBox(-27, by + 1, z, -27, by + 6, z, PALETTE.TIMBER_DARK, 0.01);
+                fillBox(-17, by + 1, z, -17, by + 6, z, PALETTE.TIMBER_DARK, 0.01);
+                for (let x = -26; x <= -18; x += 2) {
+                    const sag = Math.abs(x - (-22)) <= 2 ? 0 : 1;
+                    setEmissiveVoxel(x, by + 5 + sag, z, (x % 4 === 0) ? PALETTE.GLOW_RED_LANTERN : PALETTE.GLOW_WARM);
+                }
+            }
+
+            // 8. Stone Lanterns (Toro) lining the Sanctuary & Pathways
+            const lanternSpots = [
+                [23, -12], [33, -12], [23, -20], [33, -20], [16, -28], [40, -28], [28, -42],
+                [23, -1], [33, -1], [12, 3], [12, -3], [-14, 3], [-14, -3],
+                [33, 14], [39, 24], [14, 31], [34, 37]
+            ];
+            for (const [lx, lz] of lanternSpots) {
+                const ly = getGroundHeight(lx, lz);
+                if (ly >= 1) buildStoneLantern(lx, ly, lz);
+            }
+
+            // 9. Lush Cherry Blossom (Sakura) Trees in the Sanctuary & Gardens
+            const sakuraSpots = [
+                [14, -38, 1.25], [42, -38, 1.25], [14, -14, 1.15], [42, -14, 1.2],
+                [44, -28, 1.1],  [12, -26, 1.05], [20, 12, 1.2],   [44, 6, 1.15],
+                [-6, 14, 1.1],   [-36, 6, 1.15],  [26, 48, 1.15],  [56, -8, 1.0],
+                [-56, 26, 1.1],  [14, 24, 1.05]
+            ];
+            for (const [sx, sz, sc] of sakuraSpots) {
+                buildSakuraTree(sx, sz, sc);
+            }
+
+            // 10. Autumn Red Maples & Japanese Pruned Pines
+            const mapleSpots = [
+                [-20, -34, 1.1], [-48, -22, 1.05], [56, -34, 1.1],
+                [56, 34, 1.05],  [-56, -6, 1.0],   [-2, -26, 1.05]
+            ];
+            for (const [mx, mz, sc] of mapleSpots) {
+                buildMapleTree(mx, mz, sc);
+            }
+
+            const pineSpots = [
+                [-30, -48], [-44, -36], [-54, -48], [-22, -46],
+                [54, -48],  [-58, 56],  [58, 56]
+            ];
+            for (const [px, pz] of pineSpots) {
+                buildPineTree(px, pz);
+            }
+
+            // 11. Bamboo Forest Grove on the Western Slope (X: -64..-46, Z: -32..-10)
+            for (let bx = -63; bx <= -48; bx += 2) {
+                for (let bz = -32; bz <= -12; bz += 2) {
+                    if (rand() < 0.68) {
+                        buildBambooStalk(bx + (rand() < 0.5 ? 0 : 1), bz + (rand() < 0.5 ? 0 : 1));
+                    }
+                }
+            }
+        }
+
+        // ============================================================================
+        // 10. THREE.JS SCENE, LIGHTING & HIGH-PERFORMANCE INSTANCED MESH SETUP
+        // ============================================================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1e293b);
+        scene.fog = new THREE.FogExp2(0x2e2640, 0.0028);
+
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.5, 450);
+        camera.position.set(-68, 56, 86);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.08;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(6, 12, -4);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.maxPolarAngle = Math.PI * 0.485;
+        controls.minDistance = 12;
+        controls.maxDistance = 210;
+
+        // Dynamic Lighting Setup
+        const hemiLight = new THREE.HemisphereLight(0xffeedd, 0x334155, 0.65);
+        hemiLight.position.set(0, 90, 0);
+        scene.add(hemiLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffb478, 1.35);
+        sunLight.position.set(-85, 75, 65);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 260;
+        const dShadow = 92;
+        sunLight.shadow.camera.left = -dShadow;
+        sunLight.shadow.camera.right = dShadow;
+        sunLight.shadow.camera.top = dShadow;
+        sunLight.shadow.camera.bottom = -dShadow;
+        sunLight.shadow.bias = -0.0005;
+        scene.add(sunLight);
+
+        // Warm Point Lights at Key Architectural Hubs (brighten at Sunset & Night)
+        const warmLights = [];
+        const lightCoords = [
+            { x: 28, y: 18, z: -28, dist: 42, intensity: 1.8 }, // Pagoda lower glow
+            { x: 28, y: 36, z: -28, dist: 38, intensity: 1.5 }, // Pagoda upper glow
+            { x: -4, y: 8,  z: 0,   dist: 28, intensity: 1.2 }, // Drum Bridge
+            { x: -22, y: 9, z: 18,  dist: 36, intensity: 1.6 }, // Market Street North
+            { x: -22, y: 9, z: 42,  dist: 36, intensity: 1.5 }  // Market Street South
+        ];
+        for (const lc of lightCoords) {
+            const pl = new THREE.PointLight(0xff9e44, lc.intensity, lc.dist, 1.6);
+            pl.position.set(lc.x, lc.y, lc.z);
+            pl.userData.baseIntensity = lc.intensity;
+            scene.add(pl);
+            warmLights.push(pl);
+        }
+
+        // Convert Voxel Maps into Optimized InstancedMeshes
+        let solidInstancedMesh = null;
+        let emissiveInstancedMesh = null;
+        let waterInstancedMesh = null;
+        const waterAnimatedList = [];
+        let totalRenderedVoxels = 0;
+
+        // Custom shader tweak on solid voxel material to give subtle crisp voxel edge definition
+        const solidMaterial = new THREE.MeshStandardMaterial({
+            roughness: 0.78,
+            metalness: 0.06
+        });
+        solidMaterial.onBeforeCompile = (shader) => {
+            shader.vertexShader = shader.vertexShader.replace(
+                '#include <common>',
+                `#include <common>
+                 varying vec3 vLocalPos;`
+            ).replace(
+                '#include <begin_vertex>',
+                `#include <begin_vertex>
+                 vLocalPos = position;`
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <common>',
+                `#include <common>
+                 varying vec3 vLocalPos;`
+            ).replace(
+                '#include <dithering_fragment>',
+                `
+                // Subtle voxel bevel edge darkening for authentic MagicaVoxel aesthetic
+                vec3 absP = abs(vLocalPos) * 2.0;
+                float edgeFactor = max(max(min(absP.x, absP.y), min(absP.y, absP.z)), min(absP.x, absP.z));
+                float bevel = smoothstep(0.86, 1.0, edgeFactor);
+                gl_FragColor.rgb *= (1.0 - bevel * 0.13);
+                #include <dithering_fragment>
+                `
+            );
+        };
+
+        const emissiveMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            emissive: 0xffae42,
+            emissiveIntensity: 0.95,
+            roughness: 0.3
+        });
+
+        const waterMaterial = new THREE.MeshStandardMaterial({
+            roughness: 0.15,
+            metalness: 0.25,
+            transparent: true,
+            opacity: 0.84
+        });
+
+        function buildInstancedMeshes() {
+            const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+            const dummy = new THREE.Object3D();
+            const colorObj = new THREE.Color();
+
+            // 1. Cull fully buried underground solid voxels (surrounded on all 6 faces by solid voxels)
+            const visibleSolid = [];
+            solidVoxels.forEach((col, key) => {
+                const { x, y, z } = unpackKey(key);
+                if (
+                    solidVoxels.has(packKey(x + 1, y, z)) &&
+                    solidVoxels.has(packKey(x - 1, y, z)) &&
+                    solidVoxels.has(packKey(x, y + 1, z)) &&
+                    solidVoxels.has(packKey(x, y - 1, z)) &&
+                    solidVoxels.has(packKey(x, y, z + 1)) &&
+                    solidVoxels.has(packKey(x, y, z - 1))
+                ) {
+                    return; // Completely hidden interior block
+                }
+                visibleSolid.push({ x, y, z, col });
+            });
+
+            solidInstancedMesh = new THREE.InstancedMesh(boxGeo, solidMaterial, visibleSolid.length);
+            solidInstancedMesh.castShadow = true;
+            solidInstancedMesh.receiveShadow = true;
+
+            for (let i = 0; i < visibleSolid.length; i++) {
+                const v = visibleSolid[i];
+                dummy.position.set(v.x, v.y, v.z);
+                dummy.updateMatrix();
+                solidInstancedMesh.setMatrixAt(i, dummy.matrix);
+                colorObj.setHex(v.col);
+                solidInstancedMesh.setColorAt(i, colorObj);
+            }
+            solidInstancedMesh.instanceMatrix.needsUpdate = true;
+            solidInstancedMesh.instanceColor.needsUpdate = true;
+            scene.add(solidInstancedMesh);
+
+            // 2. Emissive Voxels (Lanterns, Pagoda Windows, House Shoji Screens)
+            const emissiveArr = [];
+            emissiveVoxels.forEach((col, key) => {
+                const { x, y, z } = unpackKey(key);
+                emissiveArr.push({ x, y, z, col });
+            });
+
+            emissiveInstancedMesh = new THREE.InstancedMesh(boxGeo, emissiveMaterial, emissiveArr.length);
+            for (let i = 0; i < emissiveArr.length; i++) {
+                const v = emissiveArr[i];
+                dummy.position.set(v.x, v.y, v.z);
+                dummy.updateMatrix();
+                emissiveInstancedMesh.setMatrixAt(i, dummy.matrix);
+                colorObj.setHex(v.col);
+                emissiveInstancedMesh.setColorAt(i, colorObj);
+            }
+            emissiveInstancedMesh.instanceMatrix.needsUpdate = true;
+            emissiveInstancedMesh.instanceColor.needsUpdate = true;
+            scene.add(emissiveInstancedMesh);
+
+            // 3. Water Voxels
+            waterVoxels.forEach((v) => {
+                waterAnimatedList.push(v);
+            });
+            waterInstancedMesh = new THREE.InstancedMesh(boxGeo, waterMaterial, waterAnimatedList.length);
+            waterInstancedMesh.receiveShadow = true;
+            for (let i = 0; i < waterAnimatedList.length; i++) {
+                const v = waterAnimatedList[i];
+                dummy.position.set(v.x, v.y - 0.15, v.z);
+                dummy.scale.set(1, 0.85, 1);
+                dummy.updateMatrix();
+                waterInstancedMesh.setMatrixAt(i, dummy.matrix);
+                colorObj.setHex(v.color);
+                waterInstancedMesh.setColorAt(i, colorObj);
+            }
+            waterInstancedMesh.instanceMatrix.needsUpdate = true;
+            waterInstancedMesh.instanceColor.needsUpdate = true;
+            scene.add(waterInstancedMesh);
+
+            totalRenderedVoxels = visibleSolid.length + emissiveArr.length + waterAnimatedList.length;
+        }
+
+        // ============================================================================
+        // 11. ANIMATED ROTATING WATERWHEEL, KOI FISH, VILLAGERS & SAKURA PETALS
+        // ============================================================================
+        const sharedUnitBox = new THREE.BoxGeometry(1, 1, 1);
+
+        // A. Animated Voxel Waterwheel beside the Mill House (-27, 2, -18)
+        const waterwheelGroup = new THREE.Group();
+        waterwheelGroup.position.set(-27.5, 2.5, -18);
+        function createVoxelWaterwheel() {
+            const woodMat = new THREE.MeshStandardMaterial({ color: PALETTE.TIMBER_WARM, roughness: 0.8 });
+            const darkMat = new THREE.MeshStandardMaterial({ color: PALETTE.TIMBER_DARK, roughness: 0.8 });
+            const R = 4;
+            for (let dx = -R; dx <= R; dx++) {
+                for (let dy = -R; dy <= R; dy++) {
+                    const dist = Math.hypot(dx, dy);
+                    const isRim = Math.abs(dist - R) < 0.75;
+                    const isSpoke = (dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy)) && dist <= R;
+                    if (isRim || isSpoke) {
+                        const m = new THREE.Mesh(sharedUnitBox, isRim ? woodMat : darkMat);
+                        m.position.set(0, dy * 0.75, dx * 0.75);
+                        m.scale.set(0.85, 0.72, 0.72);
+                        m.castShadow = true;
+                        waterwheelGroup.add(m);
+                        totalRenderedVoxels++;
+                    }
+                }
+            }
+            scene.add(waterwheelGroup);
+        }
+
+        // B. 20 Animated Voxel Koi Fish Swimming in the River
+        const koiFishList = [];
+        function createKoiFish() {
+            const koiPatterns = [
+                [0xf97316, 0xffffff, 0xf97316], // Kohaku (Orange & White)
+                [0xef4444, 0xffffff, 0x1e293b], // Sanke (Red, White, Black)
+                [0xfbbf24, 0xfef08a, 0xf59e0b], // Yamabuki (Golden Koi)
+                [0xffffff, 0xf43f5e, 0xffffff]  // Tancho
+            ];
+
+            for (let i = 0; i < 20; i++) {
+                const pat = koiPatterns[i % koiPatterns.length];
+                const group = new THREE.Group();
+                const head = new THREE.Mesh(sharedUnitBox, new THREE.MeshStandardMaterial({ color: pat[0] }));
+                head.scale.set(0.45, 0.3, 0.55);
+                head.position.set(0, 0, 0.35);
+
+                const body = new THREE.Mesh(sharedUnitBox, new THREE.MeshStandardMaterial({ color: pat[1] }));
+                body.scale.set(0.38, 0.28, 0.55);
+                body.position.set(0, 0, -0.15);
+
+                const tail = new THREE.Mesh(sharedUnitBox, new THREE.MeshStandardMaterial({ color: pat[2] }));
+                tail.scale.set(0.22, 0.24, 0.45);
+                tail.position.set(0, 0, -0.6);
+
+                group.add(head, body, tail);
+                scene.add(group);
+                totalRenderedVoxels += 3;
+
+                koiFishList.push({
+                    group,
+                    tail,
+                    zProgress: randRange(-60, 60),
+                    dir: i % 2 === 0 ? 1 : -1,
+                    speed: randRange(3.2, 5.5),
+                    laneOffset: randRange(-2.5, 2.5),
+                    phase: rand() * Math.PI * 2
+                });
+            }
+        }
+
+        // C. 34 Animated Voxel Villagers Living & Walking through the Village & Pagoda
+        const villagers = [];
+        const VILLAGER_PROFILES = [
+            { name: 'Hana', role: 'Tea House Hostess', kimono: 0xf43f5e, obi: 0xfbbf24, hat: 'hairpin', icon: '🍵' },
+            { name: 'Kenji', role: 'Lantern Craftsman', kimono: 0x2563eb, obi: 0xf8fafc, hat: 'bandana', icon: '🏮' },
+            { name: 'Master Tenzin', role: 'Pagoda Shrine Monk', kimono: 0xd97706, obi: 0x78350f, hat: 'kasa', icon: '📿' },
+            { name: 'Sakura', role: 'Blossom Poet', kimono: 0xf472b6, obi: 0x9d174d, hat: 'parasol', icon: '🌸' },
+            { name: 'Daiki', role: 'Koi River Fisherman', kimono: 0x0d9488, obi: 0x134e4a, hat: 'kasa', icon: '🎣' },
+            { name: 'Yuki', role: 'Silk Weaver', kimono: 0x8b5cf6, obi: 0xfde047, hat: 'hairpin', icon: '👘' },
+            { name: 'Ren', role: 'Samurai Watchman', kimono: 0x1e293b, obi: 0xdc2626, hat: 'topknot', icon: '⚔️' },
+            { name: 'Mei', role: 'Sweet Dango Seller', kimono: 0x10b981, obi: 0xfef08a, hat: 'bandana', icon: '🍡' },
+            { name: 'Haruto', role: 'Bamboo Flute Musician', kimono: 0x4f46e5, obi: 0xe2e8f0, hat: 'kasa', icon: '🪈' },
+            { name: 'Aoi', role: 'Shrine Maiden (Miko)', kimono: 0xf8fafc, obi: 0xdc2626, hat: 'hairpin', icon: '⛩️' }
+        ];
+
+        // Waypoint Paths for Villagers so they walk naturally along roads, bridges & stairs
+        const VILLAGER_PATHS = [
+            // Path 0: Main Avenue from West Village across Crimson Drum Bridge to Pagoda Stairs
+            [[-52, 1], [-36, 0], [-22, 0], [-13, 0], [-4, 0], [5, 0], [18, 0], [28, -1]],
+            // Path 1: Up the Sanctuary Stairs & Full Loop around the 5-Tier Pagoda Courtyard
+            [[28, -2], [28, -10], [28, -15], [15, -15], [15, -40], [40, -40], [40, -15], [28, -15], [28, -10], [28, -2]],
+            // Path 2: Bustling North-South Market Street
+            [[-22, -10], [-22, 0], [-22, 12], [-22, 24], [-22, 34], [-22, 46], [-22, 56]],
+            // Path 3: Southern Village Loop & Wooden Footbridge to East Sakura Garden
+            [[-42, 34], [-22, 34], [0, 34], [14, 34], [24, 34], [36, 34], [36, 18], [36, 2], [28, 0]],
+            // Path 4: Bamboo Grove & Watermill Stroll
+            [[-48, 0], [-36, 0], [-24, -6], [-22, -12], [-32, -14], [-42, -8]]
+        ];
+
+        function getVillagerElevation(x, z) {
+            // Check if on Crimson Drum Bridge (Z near 0, X near bridge1River)
+            const r1 = getRiverInfo(0);
+            if (Math.abs(z - 0) <= 3.2 && Math.abs(x - r1.centerX) <= 8.2) {
+                const norm = (x - r1.centerX) / 8;
+                return 1 + (1 - norm * norm) * 4.4;
+            }
+            // Check if on Southern Wooden Bridge (Z near 34, X near bridge2River)
+            const r2 = getRiverInfo(34);
+            if (Math.abs(z - 34) <= 2.5 && Math.abs(x - r2.centerX) <= 7.2) {
+                const norm = (x - r2.centerX) / 7;
+                return 1 + (1 - norm * norm) * 2.8;
+            }
+            // Check if on South Sanctuary Stairs (X in 24..32, Z in -10..-3)
+            if (x >= 24 && x <= 32 && z >= -10 && z <= -3) {
+                return 1 + ((-3 - z) / 7) * 7;
+            }
+            return Math.max(1, getGroundHeight(Math.round(x), Math.round(z)));
+        }
+
+        function buildVoxelVillagerMesh(profile, hasLantern) {
+            const root = new THREE.Group();
+
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdbb5, roughness: 0.7 });
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x1e1b18, roughness: 0.8 });
+            const kimonoMat = new THREE.MeshStandardMaterial({ color: profile.kimono, roughness: 0.75 });
+            const obiMat = new THREE.MeshStandardMaterial({ color: profile.obi, roughness: 0.6 });
+            const kasaMat = new THREE.MeshStandardMaterial({ color: 0xd4a359, roughness: 0.8 });
+
+            // Legs
+            const leftLeg = new THREE.Mesh(sharedUnitBox, hairMat);
+            leftLeg.scale.set(0.24, 0.45, 0.24);
+            leftLeg.position.set(-0.15, 0.22, 0);
+
+            const rightLeg = new THREE.Mesh(sharedUnitBox, hairMat);
+            rightLeg.scale.set(0.24, 0.45, 0.24);
+            rightLeg.position.set(0.15, 0.22, 0);
+
+            // Kimono Torso + Obi Sash
+            const torso = new THREE.Mesh(sharedUnitBox, kimonoMat);
+            torso.scale.set(0.56, 0.68, 0.36);
+            torso.position.set(0, 0.76, 0);
+            torso.castShadow = true;
+
+            const obi = new THREE.Mesh(sharedUnitBox, obiMat);
+            obi.scale.set(0.60, 0.18, 0.40);
+            obi.position.set(0, 0.65, 0);
+
+            // Head & Hair
+            const headGroup = new THREE.Group();
+            headGroup.position.set(0, 1.32, 0);
+            const head = new THREE.Mesh(sharedUnitBox, skinMat);
+            head.scale.set(0.46, 0.46, 0.46);
+            head.castShadow = true;
+
+            const hair = new THREE.Mesh(sharedUnitBox, hairMat);
+            hair.scale.set(0.50, 0.22, 0.50);
+            hair.position.set(0, 0.18, -0.02);
+            headGroup.add(head, hair);
+
+            // Distinct Hat / Hair Ornament
+            if (profile.hat === 'kasa') {
+                const kasaBrim = new THREE.Mesh(sharedUnitBox, kasaMat);
+                kasaBrim.scale.set(0.95, 0.10, 0.95);
+                kasaBrim.position.set(0, 0.30, 0);
+                const kasaPeak = new THREE.Mesh(sharedUnitBox, kasaMat);
+                kasaPeak.scale.set(0.50, 0.14, 0.50);
+                kasaPeak.position.set(0, 0.40, 0);
+                headGroup.add(kasaBrim, kasaPeak);
+            } else if (profile.hat === 'hairpin') {
+                const bun = new THREE.Mesh(sharedUnitBox, hairMat);
+                bun.scale.set(0.26, 0.22, 0.26);
+                bun.position.set(0, 0.32, -0.08);
+                const ornament = new THREE.Mesh(sharedUnitBox, new THREE.MeshStandardMaterial({ color: 0xf43f5e }));
+                ornament.scale.set(0.42, 0.08, 0.08);
+                ornament.position.set(0, 0.32, -0.08);
+                headGroup.add(bun, ornament);
+            }
+
+            // Left & Right Arms
+            const leftArm = new THREE.Mesh(sharedUnitBox, kimonoMat);
+            leftArm.scale.set(0.22, 0.52, 0.24);
+            leftArm.position.set(-0.40, 0.80, 0);
+
+            const rightArm = new THREE.Mesh(sharedUnitBox, kimonoMat);
+            rightArm.scale.set(0.22, 0.52, 0.24);
+            rightArm.position.set(0.40, 0.80, 0);
+
+            // Optional Hand-Held Glowing Paper Lantern or Parasol
+            if (hasLantern) {
+                const lanternStick = new THREE.Mesh(sharedUnitBox, kasaMat);
+                lanternStick.scale.set(0.06, 0.06, 0.45);
+                lanternStick.position.set(0, -0.18, 0.22);
+                const lanternBulb = new THREE.Mesh(sharedUnitBox, emissiveMaterial);
+                lanternBulb.scale.set(0.22, 0.28, 0.22);
+                lanternBulb.position.set(0, -0.35, 0.38);
+                rightArm.add(lanternStick, lanternBulb);
+            } else if (profile.hat === 'parasol') {
+                const pPole = new THREE.Mesh(sharedUnitBox, kasaMat);
+                pPole.scale.set(0.06, 1.1, 0.06);
+                pPole.position.set(0, 0.45, 0.1);
+                const pCanopy = new THREE.Mesh(sharedUnitBox, new THREE.MeshStandardMaterial({ color: 0xfb7185 }));
+                pCanopy.scale.set(1.15, 0.12, 1.15);
+                pCanopy.position.set(0, 1.0, 0.1);
+                rightArm.add(pPole, pCanopy);
+            }
+
+            root.add(leftLeg, rightLeg, torso, obi, headGroup, leftArm, rightArm);
+            totalRenderedVoxels += 8;
+            return { root, leftLeg, rightLeg, leftArm, rightArm, headGroup };
+        }
+
+        function spawnVillagers() {
+            for (let i = 0; i < 34; i++) {
+                const baseProf = VILLAGER_PROFILES[i % VILLAGER_PROFILES.length];
+                const profile = {
+                    ...baseProf,
+                    name: i < VILLAGER_PROFILES.length ? baseProf.name : `${baseProf.name} #${Math.floor(i / VILLAGER_PROFILES.length) + 1}`
+                };
+                const path = VILLAGER_PATHS[i % VILLAGER_PATHS.length];
+                const wpIndex = i % (path.length - 1);
+                const nextIndex = wpIndex + 1;
+                const progress = rand();
+
+                const rig = buildVoxelVillagerMesh(profile, i % 3 === 0);
+                scene.add(rig.root);
+
+                villagers.push({
+                    id: i,
+                    profile,
+                    rig,
+                    path,
+                    wpIndex,
+                    dir: i % 2 === 0 ? 1 : -1,
+                    progress,
+                    speed: randRange(1.85, 2.75),
+                    pauseTimer: 0,
+                    walkPhase: rand() * Math.PI * 2
+                });
+            }
+        }
+
+        // D. 750 Falling Cherry Blossom Petals & Nighttime Fireflies
+        let petalInstancedMesh = null;
+        const petalList = [];
+        function createSakuraPetals() {
+            const count = 750;
+            const geo = new THREE.BoxGeometry(0.22, 0.06, 0.22);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xfbcfe8 });
+            petalInstancedMesh = new THREE.InstancedMesh(geo, mat, count);
+
+            const colorObj = new THREE.Color();
+            const pCols = [0xf472b6, 0xf9a8d4, 0xfce7f3, 0xffffff];
+
+            for (let i = 0; i < count; i++) {
+                const canopy = pick(sakuraCanopyCenters);
+                petalList.push({
+                    x: canopy.x + randRange(-8, 8),
+                    y: canopy.y + randRange(-4, 6),
+                    z: canopy.z + randRange(-8, 8),
+                    vx: randRange(0.5, 1.4),
+                    vy: randRange(-1.4, -0.65),
+                    vz: randRange(-0.4, 0.8),
+                    phase: rand() * Math.PI * 2
+                });
+                colorObj.setHex(pick(pCols));
+                petalInstancedMesh.setColorAt(i, colorObj);
+            }
+            petalInstancedMesh.instanceColor.needsUpdate = true;
+            scene.add(petalInstancedMesh);
+            totalRenderedVoxels += count;
+        }
+
+        // ============================================================================
+        // 12. DAY / SUNSET / NIGHT ATMOSPHERE ENGINE
+        // ============================================================================
+        let currentHour = 17.6; // Default to Golden Sunset
+        let autoTimeCycle = false;
+        let autoOrbit = false;
+
+        const SKY_KEYFRAMES = [
+            { h: 0,  sky: 0x090d1a, fog: 0x0c1224, sun: 0x3b82f6, sunI: 0.18, hemiSky: 0x1e293b, hemiGnd: 0x0f172a, hemiI: 0.32, glow: 2.3 },
+            { h: 5,  sky: 0x1e1b4b, fog: 0x2e1065, sun: 0xf472b6, sunI: 0.45, hemiSky: 0x818cf8, hemiGnd: 0x1e1b4b, hemiI: 0.45, glow: 1.8 },
+            { h: 7,  sky: 0xfda4af, fog: 0xfecdd3, sun: 0xfb923c, sunI: 1.05, hemiSky: 0xffedd5, hemiGnd: 0x475569, hemiI: 0.65, glow: 0.6 },
+            { h: 12, sky: 0x7dd3fc, fog: 0xbae6fd, sun: 0xfffbeb, sunI: 1.45, hemiSky: 0xffffff, hemiGnd: 0x475569, hemiI: 0.78, glow: 0.25 },
+            { h: 16, sky: 0x93c5fd, fog: 0xfed7aa, sun: 0xfdba74, sunI: 1.35, hemiSky: 0xffedd5, hemiGnd: 0x334155, hemiI: 0.70, glow: 0.55 },
+            { h: 18, sky: 0x4c1d4b, fog: 0x7c2d42, sun: 0xf97316, sunI: 1.15, hemiSky: 0xfda4af, hemiGnd: 0x1e1b4b, hemiI: 0.55, glow: 1.75 },
+            { h: 20, sky: 0x111827, fog: 0x172033, sun: 0x60a5fa, sunI: 0.22, hemiSky: 0x334155, hemiGnd: 0x0f172a, hemiI: 0.35, glow: 2.25 },
+            { h: 24, sky: 0x090d1a, fog: 0x0c1224, sun: 0x3b82f6, sunI: 0.18, hemiSky: 0x1e293b, hemiGnd: 0x0f172a, hemiI: 0.32, glow: 2.3 }
+        ];
+
+        const cA = new THREE.Color(), cB = new THREE.Color();
+        function updateAtmosphere(hour) {
+            hour = ((hour % 24) + 24) % 24;
+            currentHour = hour;
+
+            let k0 = SKY_KEYFRAMES[0], k1 = SKY_KEYFRAMES[1];
+            for (let i = 0; i < SKY_KEYFRAMES.length - 1; i++) {
+                if (hour >= SKY_KEYFRAMES[i].h && hour <= SKY_KEYFRAMES[i + 1].h) {
+                    k0 = SKY_KEYFRAMES[i];
+                    k1 = SKY_KEYFRAMES[i + 1];
+                    break;
+                }
+            }
+            const t = (hour - k0.h) / Math.max(0.001, k1.h - k0.h);
+
+            // Sky & Fog
+            cA.setHex(k0.sky); cB.setHex(k1.sky);
+            scene.background.copy(cA.lerp(cB, t));
+
+            cA.setHex(k0.fog); cB.setHex(k1.fog);
+            scene.fog.color.copy(cA.lerp(cB, t));
+
+            // Directional Sun / Moon arc
+            const sunAngle = ((hour - 6) / 24) * Math.PI * 2;
+            const isDay = hour >= 5.5 && hour <= 19.2;
+            const elevAngle = isDay ? ((hour - 5.5) / 13.7) * Math.PI : ((hour < 5.5 ? hour + 4.8 : hour - 19.2) / 10.3) * Math.PI;
+            const r = 115;
+            sunLight.position.set(
+                -Math.cos(elevAngle) * r * 0.85,
+                Math.max(18, Math.sin(elevAngle) * r),
+                52 + Math.sin(sunAngle) * 35
+            );
+
+            cA.setHex(k0.sun); cB.setHex(k1.sun);
+            sunLight.color.copy(cA.lerp(cB, t));
+            sunLight.intensity = k0.sunI + (k1.sunI - k0.sunI) * t;
+
+            // Hemisphere Light
+            cA.setHex(k0.hemiSky); cB.setHex(k1.hemiSky);
+            hemiLight.color.copy(cA.lerp(cB, t));
+            cA.setHex(k0.hemiGnd); cB.setHex(k1.hemiGnd);
+            hemiLight.groundColor.copy(cA.lerp(cB, t));
+            hemiLight.intensity = k0.hemiI + (k1.hemiI - k0.hemiI) * t;
+
+            // Lantern & Window Emissive Intensity
+            const glowVal = k0.glow + (k1.glow - k0.glow) * t;
+            emissiveMaterial.emissiveIntensity = glowVal;
+            for (const wl of warmLights) {
+                wl.intensity = wl.userData.baseIntensity * Math.max(0.15, (glowVal - 0.2) * 0.85);
+            }
+
+            // Update Time Display Badge
+            const hh = Math.floor(hour).toString().padStart(2, '0');
+            const mm = Math.floor((hour % 1) * 60).toString().padStart(2, '0');
+            let label = 'Midday Sun';
+            if (hour < 5.5 || hour >= 20) label = 'Lantern Night';
+            else if (hour < 10.5) label = 'Sakura Morning';
+            else if (hour >= 16.2 && hour < 20) label = 'Golden Sunset';
+            document.getElementById('time-display').textContent = `${hh}:${mm} • ${label}`;
+        }
+
+        // ============================================================================
+        // 13. CAMERA PRESETS, SMOOTH TRANSITIONS & VILLAGER FOLLOW MODE
+        // ============================================================================
+        const CAMERA_BOOKMARKS = {
+            overview:  { pos: new THREE.Vector3(-68, 56, 86),  target: new THREE.Vector3(6, 12, -4),    icon: '🗺️', cat: 'Panoramic View', title: 'Kitsune Valley & Sanctuary Overview' },
+            pagoda:    { pos: new THREE.Vector3(-2, 34, 8),    target: new THREE.Vector3(28, 28, -28),  icon: '🏯', cat: 'Sacred Landmark', title: 'Five-Tier Crimson & Gold Pagoda' },
+            bridge:    { pos: new THREE.Vector3(-26, 16, 24),  target: new THREE.Vector3(-3, 4, -2),    icon: '🌉', cat: 'Garden Waterway', title: 'Taiko Drum Bridge & Koi River' },
+            market:    { pos: new THREE.Vector3(-22, 16, 62),  target: new THREE.Vector3(-22, 5, 18),   icon: '🏮', cat: 'Village District', title: 'Bustling Merchant Street & Stalls' },
+            waterfall: { pos: new THREE.Vector3(-4, 24, -12),  target: new THREE.Vector3(-32, 10, -34), icon: '🌊', cat: 'Mountain Spring', title: 'Cascade Waterfall & Watermill' }
+        };
+
+        let camTransition = null;
+        let followedVillagerIndex = -1;
+
+        function setPOIBanner(icon, category, title) {
+            document.getElementById('poi-icon').textContent = icon;
+            document.getElementById('poi-category').textContent = category;
+            document.getElementById('poi-title').textContent = title;
+        }
+
+        function flyToCameraBookmark(key) {
+            document.querySelectorAll('.cam-btn').forEach(b => b.classList.toggle('active', b.dataset.cam === key));
+
+            if (key === 'villager') {
+                startFollowingVillager(followedVillagerIndex >= 0 ? followedVillagerIndex : 0);
+                return;
+            }
+
+            stopFollowingVillager();
+            const bm = CAMERA_BOOKMARKS[key];
+            if (!bm) return;
+
+            setPOIBanner(bm.icon, bm.cat, bm.title);
+            camTransition = {
+                startPos: camera.position.clone(),
+                endPos: bm.pos.clone(),
+                startTarget: controls.target.clone(),
+                endTarget: bm.target.clone(),
+                t: 0
+            };
+        }
+
+        function startFollowingVillager(idx) {
+            followedVillagerIndex = (idx + villagers.length) % villagers.length;
+            const v = villagers[followedVillagerIndex];
+            camTransition = null;
+
+            document.querySelectorAll('.cam-btn').forEach(b => b.classList.toggle('active', b.dataset.cam === 'villager'));
+            document.getElementById('villager-card').classList.remove('hidden');
+            document.getElementById('villager-avatar').textContent = v.profile.icon;
+            document.getElementById('villager-name').textContent = v.profile.name;
+            document.getElementById('villager-role').textContent = v.profile.role;
+            setPOIBanner(v.profile.icon, 'Villager POV', `Following ${v.profile.name} (${v.profile.role})`);
+        }
+
+        function stopFollowingVillager() {
+            followedVillagerIndex = -1;
+            document.getElementById('villager-card').classList.add('hidden');
+        }
+
+        // Click Raycaster to select and follow any villager directly in 3D space
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        let pointerDownPos = { x: 0, y: 0 };
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 6) return;
+            pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(pointer, camera);
+
+            const villagerRoots = villagers.map(v => v.rig.root);
+            const hits = raycaster.intersectObjects(villagerRoots, true);
+            if (hits.length > 0) {
+                let obj = hits[0].object;
+                while (obj.parent && !villagerRoots.includes(obj)) {
+                    obj = obj.parent;
+                }
+                const foundIdx = villagers.findIndex(v => v.rig.root === obj);
+                if (foundIdx >= 0) {
+                    startFollowingVillager(foundIdx);
+                }
+            }
+        });
+
+        // ============================================================================
+        // 14. UI EVENT LISTENERS
+        // ============================================================================
+        document.querySelectorAll('.cam-btn').forEach(btn => {
+            btn.addEventListener('click', () => flyToCameraBookmark(btn.dataset.cam));
+        });
+
+        document.getElementById('btn-prev-villager').addEventListener('click', () => {
+            startFollowingVillager(followedVillagerIndex - 1);
+        });
+        document.getElementById('btn-next-villager').addEventListener('click', () => {
+            startFollowingVillager(followedVillagerIndex + 1);
+        });
+        document.getElementById('btn-stop-follow').addEventListener('click', () => {
+            flyToCameraBookmark('overview');
+        });
+
+        const timeSlider = document.getElementById('time-slider');
+        timeSlider.addEventListener('input', (e) => {
+            autoTimeCycle = false;
+            document.getElementById('btn-auto-time').classList.remove('active');
+            document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+            updateAtmosphere(parseFloat(e.target.value));
+        });
+
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                autoTimeCycle = false;
+                document.getElementById('btn-auto-time').classList.remove('active');
+                document.querySelectorAll('.time-btn').forEach(b => b.classList.toggle('active', b === btn));
+                const h = parseFloat(btn.dataset.time);
+                timeSlider.value = h;
+                updateAtmosphere(h);
+            });
+        });
+
+        document.getElementById('btn-auto-time').addEventListener('click', function () {
+            autoTimeCycle = !autoTimeCycle;
+            this.classList.toggle('active', autoTimeCycle);
+        });
+
+        document.getElementById('btn-auto-rotate').addEventListener('click', function () {
+            autoOrbit = !autoOrbit;
+            controls.autoRotate = autoOrbit;
+            controls.autoRotateSpeed = 0.65;
+            this.classList.toggle('active', autoOrbit);
+        });
+
+        let uiVisible = true;
+        function toggleUI() {
+            uiVisible = !uiVisible;
+            document.getElementById('ui-footer').style.opacity = uiVisible ? '1' : '0';
+            document.getElementById('ui-footer').style.pointerEvents = uiVisible ? 'none' : 'none';
+            document.querySelectorAll('#ui-footer > div').forEach(el => {
+                el.style.pointerEvents = uiVisible ? 'auto' : 'none';
+            });
+        }
+        document.getElementById('btn-toggle-ui').addEventListener('click', toggleUI);
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'h' || e.key === 'H') toggleUI();
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ============================================================================
+        // 15. MAIN ANIMATION LOOP & INITIALIZATION
+        // ============================================================================
+        const animDummy = new THREE.Object3D();
+        const clock = new THREE.Clock();
+        let frameCount = 0;
+        let fpsLastTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const elapsed = clock.getElapsedTime();
+
+            // 1. FPS Counter
+            frameCount++;
+            const now = performance.now();
+            if (now - fpsLastTime >= 500) {
+                const fps = Math.round((frameCount * 1000) / (now - fpsLastTime));
+                document.getElementById('stat-fps').textContent = Math.min(60, fps);
+                frameCount = 0;
+                fpsLastTime = now;
+            }
+
+            // 2. Auto Time-of-Day Cycle
+            if (autoTimeCycle) {
+                currentHour = (currentHour + dt * 0.65) % 24;
+                timeSlider.value = currentHour;
+                updateAtmosphere(currentHour);
+            }
+
+            // 3. Rotate the Riverside Waterwheel
+            waterwheelGroup.rotation.x += dt * 0.85;
+
+            // 4. Animate River & Waterfall Shimmer
+            if (waterInstancedMesh) {
+                for (let i = 0; i < waterAnimatedList.length; i++) {
+                    const w = waterAnimatedList[i];
+                    const wave = Math.sin(elapsed * 2.6 + w.x * 0.35 + w.z * 0.35) * 0.08;
+                    animDummy.position.set(w.x, w.y - 0.14 + wave, w.z);
+                    animDummy.scale.set(1, 0.85, 1);
+                    animDummy.updateMatrix();
+                    waterInstancedMesh.setMatrixAt(i, animDummy.matrix);
+                }
+                waterInstancedMesh.instanceMatrix.needsUpdate = true;
+            }
+
+            // 5. Animate Koi Fish Swimming along the Winding River
+            for (const koi of koiFishList) {
+                koi.zProgress += koi.dir * koi.speed * dt;
+                if (koi.zProgress > 64) { koi.zProgress = 64; koi.dir = -1; }
+                if (koi.zProgress < -54) { koi.zProgress = -54; koi.dir = 1; }
+
+                const rInfo = getRiverInfo(koi.zProgress);
+                const wiggle = Math.sin(elapsed * 6.5 + koi.phase) * 0.45;
+                const kx = rInfo.centerX + koi.laneOffset + wiggle;
+                const kz = koi.zProgress;
+
+                // Look ahead to orient fish along river tangent
+                const nextZ = kz + koi.dir * 1.5;
+                const nextR = getRiverInfo(nextZ);
+                const nextX = nextR.centerX + koi.laneOffset;
+
+                koi.group.position.set(kx, -0.22, kz);
+                koi.group.lookAt(nextX, -0.22, nextZ);
+                koi.tail.rotation.y = Math.sin(elapsed * 11 + koi.phase) * 0.42;
+            }
+
+            // 6. Animate Voxel Villagers Walking along Pathways & Bridges
+            for (const v of villagers) {
+                if (v.pauseTimer > 0) {
+                    v.pauseTimer -= dt;
+                    // Subtle idle breathing & looking around
+                    v.rig.headGroup.rotation.y = Math.sin(elapsed * 2 + v.id) * 0.35;
+                    v.rig.leftLeg.rotation.x = 0;
+                    v.rig.rightLeg.rotation.x = 0;
+                    v.rig.leftArm.rotation.x = 0;
+                    v.rig.rightArm.rotation.x = 0;
+                    continue;
+                }
+
+                const p0 = v.path[v.wpIndex];
+                const nextIdx = v.wpIndex + v.dir;
+                const p1 = v.path[nextIdx];
+                const segDist = Math.max(0.1, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]));
+
+                v.progress += (v.speed * dt) / segDist;
+                if (v.progress >= 1.0) {
+                    v.progress = 0;
+                    v.wpIndex = nextIdx;
+                    if (v.wpIndex >= v.path.length - 1) {
+                        v.dir = -1;
+                        v.pauseTimer = randRange(0.8, 2.4);
+                    } else if (v.wpIndex <= 0) {
+                        v.dir = 1;
+                        v.pauseTimer = randRange(0.8, 2.4);
+                    } else if (rand() < 0.25) {
+                        v.pauseTimer = randRange(0.6, 1.8);
+                    }
+                }
+
+                const curP0 = v.path[v.wpIndex];
+                const curP1 = v.path[v.wpIndex + v.dir];
+                const vx = curP0[0] + (curP1[0] - curP0[0]) * v.progress;
+                const vz = curP0[1] + (curP1[1] - curP0[1]) * v.progress;
+                const vy = getVillagerElevation(vx, vz) + 0.5;
+
+                const swing = Math.sin(elapsed * 9.5 + v.walkPhase) * 0.55;
+                const bob = Math.abs(Math.cos(elapsed * 9.5 + v.walkPhase)) * 0.08;
+
+                v.rig.root.position.set(vx, vy + bob, vz);
+                v.rig.root.lookAt(curP1[0], vy + bob, curP1[1]);
+                v.rig.headGroup.rotation.y = 0;
+                v.rig.leftLeg.rotation.x = swing;
+                v.rig.rightLeg.rotation.x = -swing;
+                v.rig.leftArm.rotation.x = -swing * 0.7;
+                v.rig.rightArm.rotation.x = swing * 0.7;
+            }
+
+            // 7. Animate Falling Cherry Blossom Petals
+            if (petalInstancedMesh) {
+                for (let i = 0; i < petalList.length; i++) {
+                    const p = petalList[i];
+                    p.x += (p.vx + Math.sin(elapsed * 1.4 + p.phase) * 0.45) * dt;
+                    p.y += p.vy * dt;
+                    p.z += (p.vz + Math.cos(elapsed * 1.2 + p.phase) * 0.45) * dt;
+
+                    if (p.y < 0.5) {
+                        const canopy = sakuraCanopyCenters[i % sakuraCanopyCenters.length];
+                        p.x = canopy.x + randRange(-6, 6);
+                        p.y = canopy.y + randRange(0, 5);
+                        p.z = canopy.z + randRange(-6, 6);
+                    }
+
+                    animDummy.position.set(p.x, p.y, p.z);
+                    animDummy.rotation.set(elapsed * 2 + p.phase, elapsed * 1.5 + p.phase, p.phase);
+                    animDummy.scale.set(1, 1, 1);
+                    animDummy.updateMatrix();
+                    petalInstancedMesh.setMatrixAt(i, animDummy.matrix);
+                }
+                petalInstancedMesh.instanceMatrix.needsUpdate = true;
+            }
+
+            // 8. Camera Bookmark Transition or Villager Follow Tracking
+            if (camTransition) {
+                camTransition.t = Math.min(1, camTransition.t + dt * 1.35);
+                const ease = 1 - Math.pow(1 - camTransition.t, 3);
+                camera.position.lerpVectors(camTransition.startPos, camTransition.endPos, ease);
+                controls.target.lerpVectors(camTransition.startTarget, camTransition.endTarget, ease);
+                if (camTransition.t >= 1) camTransition = null;
+            } else if (followedVillagerIndex >= 0) {
+                const fv = villagers[followedVillagerIndex];
+                const vPos = fv.rig.root.position;
+                const desiredTarget = new THREE.Vector3(vPos.x, vPos.y + 1.4, vPos.z);
+                controls.target.lerp(desiredTarget, 0.1);
+                // Keep camera at a pleasant close-up offset if too far
+                const dist = camera.position.distanceTo(controls.target);
+                if (dist > 22) {
+                    const offset = camera.position.clone().sub(controls.target).normalize().multiplyScalar(16);
+                    offset.y = Math.max(6, offset.y);
+                    camera.position.lerp(controls.target.clone().add(offset), 0.06);
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Start Initialization on Window Load
+        window.onload = function () {
+            const loadingBar = document.getElementById('loading-bar');
+            const loadingOverlay = document.getElementById('loading-overlay');
+
+            setTimeout(() => {
+                loadingBar.style.width = '75%';
+                buildCompleteWorld();
+                buildInstancedMeshes();
+                createVoxelWaterwheel();
+                createKoiFish();
+                spawnVillagers();
+                createSakuraPetals();
+                updateAtmosphere(currentHour);
+
+                document.getElementById('stat-voxels').textContent = totalRenderedVoxels.toLocaleString();
+                loadingBar.style.width = '100%';
+
+                setTimeout(() => {
+                    loadingOverlay.style.opacity = '0';
+                    setTimeout(() => loadingOverlay.remove(), 700);
+                }, 180);
+
+                animate();
+            }, 60);
+        };
+    })();
+    </script>
+</body>
+</html>
